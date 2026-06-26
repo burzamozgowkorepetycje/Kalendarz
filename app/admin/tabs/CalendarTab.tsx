@@ -8,6 +8,8 @@ const ROOMS = ['Sala 1', 'Sala 2', 'Sala 3', 'Sala 4', 'Sala 5', 'Sala 6']
 const HOURS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']
 const DURATIONS = [30, 60, 90, 120]
 const REPEAT_OPTIONS = [{ label: '2 tyg.', value: 2 }, { label: '4 tyg.', value: 4 }, { label: '8 tyg.', value: 8 }, { label: '12 tyg.', value: 12 }, { label: 'Do odwołania', value: 52 }]
+const LESSON_TYPES = ['Kursy maturalne', 'Zajęcia indywidualne', 'Zajęcia grupowe']
+const SUBJECTS = ['Matematyka', 'Angielski', 'Polski', 'Hiszpański', 'Geografia', 'Biologia', 'Chemia', 'WOS']
 
 interface SlotModal { date: string; room: string; start_time: string; lesson?: Lesson }
 interface GroupEntry { student_id: string; amount_due: string }
@@ -28,6 +30,8 @@ export default function CalendarTab({ password }: { password: string }) {
     is_group: false,
     repeat: false,
     repeat_weeks: '4',
+    lesson_type: '',
+    subject: '',
   })
   const [groupEntries, setGroupEntries] = useState<GroupEntry[]>([{ student_id: '', amount_due: '' }])
   const [saving, setSaving] = useState(false)
@@ -64,6 +68,8 @@ export default function CalendarTab({ password }: { password: string }) {
         is_group: existing.is_group,
         repeat: false,
         repeat_weeks: '4',
+        lesson_type: existing.lesson_type || '',
+        subject: existing.subject || '',
       })
       if (existing.is_group) {
         const res = await fetch(`/api/admin/lesson-students?lesson_id=${existing.id}`, { headers })
@@ -72,7 +78,7 @@ export default function CalendarTab({ password }: { password: string }) {
         setGroupEntries(ls.map((s: LessonStudent) => ({ student_id: s.student_id, amount_due: String(s.amount_due || '') })))
       }
     } else {
-      setForm({ tutor_id: '', student_id: '', duration_minutes: '60', amount_due: '', tutor_amount: '', is_group: false, repeat: false, repeat_weeks: '4' })
+      setForm({ tutor_id: '', student_id: '', duration_minutes: '60', amount_due: '', tutor_amount: '', is_group: false, repeat: false, repeat_weeks: '4', lesson_type: '', subject: '' })
       setGroupEntries([{ student_id: '', amount_due: '' }])
       setLessonStudents([])
     }
@@ -99,6 +105,8 @@ export default function CalendarTab({ password }: { password: string }) {
       room: modal.room,
       is_group: form.is_group,
       status: form.tutor_id ? 'booked' : 'available',
+      lesson_type: form.lesson_type || null,
+      subject: form.subject || null,
     }
     const res = await fetch('/api/admin/lessons', { method: 'POST', headers, body: JSON.stringify(body) })
     const lesson = await res.json()
@@ -217,6 +225,7 @@ export default function CalendarTab({ password }: { password: string }) {
                           </div>
                           {!lesson.is_group && <p className="text-gray-600 truncate">{students.find(s => s.id === lesson.student_id)?.name || '—'}</p>}
                           {lesson.is_group && <p className="text-purple-700 text-xs">Grupa</p>}
+                          {lesson.subject && <p className="text-gray-500 text-xs truncate">{lesson.subject}</p>}
                           {lesson.amount_due && <p className="text-green-700 font-medium">{lesson.amount_due} zł</p>}
                         </button>
                       ) : (
@@ -326,6 +335,26 @@ export default function CalendarTab({ password }: { password: string }) {
                 <input type="number" placeholder="np. 50" value={form.tutor_amount}
                   onChange={e => setForm({ ...form, tutor_amount: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500" />
+              </div>
+
+              {/* Tags */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Rodzaj zajęć</label>
+                  <select value={form.lesson_type} onChange={e => setForm({ ...form, lesson_type: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500">
+                    <option value="">— wybierz —</option>
+                    {LESSON_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Przedmiot</label>
+                  <select value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500">
+                    <option value="">— wybierz —</option>
+                    {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
               </div>
 
               {/* Duration */}

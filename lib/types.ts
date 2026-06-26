@@ -44,6 +44,8 @@ export interface Lesson {
   room: string | null
   is_group: boolean
   tutor_amount: number | null
+  lesson_type: string | null
+  subject: string | null
   created_at: string
   // joins
   tutors?: Pick<Tutor, 'name' | 'email' | 'phone'>

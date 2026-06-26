@@ -16,6 +16,8 @@ interface CalendarLesson {
   is_group: boolean
   tutor_id: string | null
   student_id: string | null
+  lesson_type: string | null
+  subject: string | null
   tutors?: { name: string } | null
   students?: { name: string } | null
 }
@@ -25,6 +27,8 @@ interface SlotModal { room: string; start_time: string; existing?: CalendarLesso
 const ROOMS = ['Sala 1', 'Sala 2', 'Sala 3', 'Sala 4', 'Sala 5', 'Sala 6']
 const HOURS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']
 const DURATIONS = [30, 60, 90, 120]
+const LESSON_TYPES = ['Kursy maturalne', 'Zajęcia indywidualne', 'Zajęcia grupowe']
+const SUBJECTS = ['Matematyka', 'Angielski', 'Polski', 'Hiszpański', 'Geografia', 'Biologia', 'Chemia', 'WOS']
 
 function toDateStr(d: Date) { return d.toISOString().split('T')[0] }
 
@@ -35,7 +39,7 @@ export default function TutorDashboard() {
   const [students, setStudents] = useState<Student[]>([])
   const [myTutorId, setMyTutorId] = useState<string | null>(null)
   const [modal, setModal] = useState<SlotModal | null>(null)
-  const [form, setForm] = useState({ student_id: '', duration_minutes: 60 })
+  const [form, setForm] = useState({ student_id: '', duration_minutes: 60, lesson_type: '', subject: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [loadingCal, setLoadingCal] = useState(false)
@@ -65,7 +69,7 @@ export default function TutorDashboard() {
     const existing = getLessonForSlot(hour, room)
     if (existing && existing.tutor_id !== myTutorId) return // nie jego zajęcia — tylko podgląd już blokuje klik
     setModal({ room, start_time: hour, existing })
-    setForm({ student_id: existing?.student_id || '', duration_minutes: existing?.duration_minutes || 60 })
+    setForm({ student_id: existing?.student_id || '', duration_minutes: existing?.duration_minutes || 60, lesson_type: existing?.lesson_type || '', subject: existing?.subject || '' })
     setError('')
   }
 
@@ -89,6 +93,8 @@ export default function TutorDashboard() {
         duration_minutes: form.duration_minutes,
         room: modal.room,
         student_id: form.student_id,
+        lesson_type: form.lesson_type || null,
+        subject: form.subject || null,
       }),
     })
     const data = await res.json()
@@ -230,6 +236,25 @@ export default function TutorDashboard() {
                   <option value="">— wybierz ucznia —</option>
                   {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Rodzaj zajęć</label>
+                  <select value={form.lesson_type} onChange={e => setForm({ ...form, lesson_type: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500">
+                    <option value="">— wybierz —</option>
+                    {LESSON_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Przedmiot</label>
+                  <select value={form.subject} onChange={e => setForm({ ...form, subject: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500">
+                    <option value="">— wybierz —</option>
+                    {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
               </div>
 
               <div>
