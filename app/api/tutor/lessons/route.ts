@@ -43,6 +43,20 @@ export async function POST(req: NextRequest) {
     const endM = totalMinutes % 60
     const end_time = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`
 
+    // Walidacja kolizji — sala zajęta w tym czasie?
+    const newStart = h * 60 + m
+    const newEnd = totalMinutes
+    const { data: sameRoom } = await supabaseAdmin
+      .from('lessons')
+      .select('start_time, end_time')
+      .eq('date', date)
+      .eq('room', room)
+    const toMin = (t: string) => { const [hh, mm] = String(t).split(':').map(Number); return hh * 60 + (mm || 0) }
+    const conflict = (sameRoom ?? []).some(l => toMin(l.start_time) < newEnd && toMin(l.end_time) > newStart)
+    if (conflict) {
+      return NextResponse.json({ error: `${room} jest juz zajeta w tym czasie. Wybierz inna godzine lub sale.` }, { status: 409 })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('lessons')
       .insert({

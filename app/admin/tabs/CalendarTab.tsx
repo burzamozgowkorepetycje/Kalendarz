@@ -70,20 +70,25 @@ export default function CalendarTab({ password }: { password: string }) {
     setLessons(Array.isArray(data) ? data : [])
   }
 
+  // dopasowanie po "kubełku godzinowym" — lekcja 12:30 trafia do wiersza 12:00
+  const sameHourBucket = (start: string | null | undefined, hour: string) =>
+    String(start ?? '').substring(0, 2) === hour.substring(0, 2)
+
   const getLessonForSlot = (hour: string, room: string, date?: string) =>
     lessons.find(l =>
-      l.start_time?.substring(0, 5) === hour &&
+      sameHourBucket(l.start_time, hour) &&
       l.room === room &&
       (date ? l.date === date : l.date === dateStr)
     )
 
   const getLessonsForDayHour = (date: string, hour: string) =>
-    lessons.filter(l => l.date === date && l.start_time?.substring(0, 5) === hour)
+    lessons.filter(l => l.date === date && sameHourBucket(l.start_time, hour))
 
   const openModal = async (hour: string, room: string, date?: string) => {
     const modalDate = date || dateStr
     const existing = getLessonForSlot(hour, room, modalDate)
-    setModal({ date: modalDate, room, start_time: hour, lesson: existing })
+    const startTime = existing ? String(existing.start_time).substring(0, 5) : hour
+    setModal({ date: modalDate, room, start_time: startTime, lesson: existing })
     if (existing) {
       setForm({
         tutor_id: existing.tutor_id || '',
@@ -133,6 +138,7 @@ export default function CalendarTab({ password }: { password: string }) {
     }
     const res = await fetch('/api/admin/lessons', { method: 'POST', headers, body: JSON.stringify(body) })
     const lesson = await res.json()
+    if (!res.ok) return { ok: false, error: lesson.error as string }
     if (form.is_group && lesson.id) {
       for (const entry of groupEntries.filter(e => e.student_id)) {
         await fetch('/api/admin/lesson-students', {
@@ -141,6 +147,7 @@ export default function CalendarTab({ password }: { password: string }) {
         })
       }
     }
+    return { ok: true as const }
   }
 
   const handleSave = async () => {
@@ -148,10 +155,13 @@ export default function CalendarTab({ password }: { password: string }) {
     setSaving(true)
     if (modal.lesson) {
       const endTime = calcEndTime(modal.start_time, Number(form.duration_minutes))
-      await fetch('/api/admin/lessons', {
+      const res = await fetch('/api/admin/lessons', {
         method: 'PUT', headers,
         body: JSON.stringify({
           id: modal.lesson.id,
+          date: modal.date,
+          room: modal.room,
+          start_time: modal.start_time,
           tutor_id: form.tutor_id || null,
           student_id: form.is_group ? null : (form.student_id || null),
           amount_due: form.is_group ? null : (form.amount_due ? Number(form.amount_due) : null),
@@ -162,6 +172,12 @@ export default function CalendarTab({ password }: { password: string }) {
           subject: form.subject || null,
         }),
       })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        alert(data.error || 'Nie udało się zapisać zmian')
+        setSaving(false)
+        return
+      }
       if (form.is_group) {
         for (const ls of lessonStudents) {
           await fetch(`/api/admin/lesson-students?id=${ls.id}`, { method: 'DELETE', headers })
@@ -176,13 +192,27 @@ export default function CalendarTab({ password }: { password: string }) {
     } else if (form.repeat) {
       const weeks = Number(form.repeat_weeks)
       const seriesId = crypto.randomUUID()
+      const skipped: string[] = []
       for (let i = 0; i < weeks; i++) {
         const d = new Date(modal.date)
         d.setDate(d.getDate() + i * 7)
-        await createLesson(toDateStr(d), seriesId)
+        const ds = toDateStr(d)
+        const r = await createLesson(ds, seriesId)
+        if (r && !r.ok) skipped.push(ds)
+      }
+      if (skipped.length > 0) {
+        await loadLessons()
+        alert(`Część terminów pominięto (sala zajęta): ${skipped.join(', ')}. Pozostałe zostały dodane.`)
+        setSaving(false)
+        return
       }
     } else {
-      await createLesson(modal.date)
+      const r = await createLesson(modal.date)
+      if (r && !r.ok) {
+        alert(r.error || 'Nie udało się dodać zajęć')
+        setSaving(false)
+        return
+      }
     }
     await loadLessons()
     setModal(null)
@@ -271,6 +301,7 @@ export default function CalendarTab({ password }: { password: string }) {
                               <p className="font-semibold truncate">{tutors.find(t => t.id === lesson.tutor_id)?.name || '—'}</p>
                               {lesson.series_id && <RefreshCw size={9} className="shrink-0 opacity-60" />}
                             </div>
+                            <p className="opacity-70">{String(lesson.start_time).substring(0,5)}–{String(lesson.end_time).substring(0,5)}</p>
                             {!lesson.is_group && <p className="truncate opacity-80">{students.find(s => s.id === lesson.student_id)?.name || '—'}</p>}
                             {lesson.is_group && <p className="opacity-80">Grupa</p>}
                             {lesson.subject && <p className="opacity-60 truncate">{lesson.subject}</p>}
@@ -329,7 +360,7 @@ export default function CalendarTab({ password }: { password: string }) {
                               <button key={lesson.id}
                                 onClick={() => openModal(hour, lesson.room!, ds)}
                                 className={`w-full rounded-md px-1.5 py-1 text-left text-xs border transition hover:opacity-80 ${lessonColor(lesson)}`}>
-                                <p className="font-semibold truncate">{lesson.room}</p>
+                                <p className="font-semibold truncate">{lesson.room} · {String(lesson.start_time).substring(0,5)}</p>
                                 <p className="truncate opacity-80">{tutors.find(t => t.id === lesson.tutor_id)?.name || '—'}</p>
                                 {!lesson.is_group && <p className="truncate opacity-60">{students.find(s => s.id === lesson.student_id)?.name || '—'}</p>}
                                 {lesson.subject && <p className="opacity-50 truncate">{lesson.subject}</p>}
@@ -426,6 +457,15 @@ export default function CalendarTab({ password }: { password: string }) {
                   </select>
                 </div>
               )}
+
+              {/* Godzina rozpoczęcia — dowolna (np. 12:30) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Godzina rozpoczęcia</label>
+                <input type="time" step={300} value={modal.start_time}
+                  onChange={e => setModal({ ...modal, start_time: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500" />
+                <p className="text-xs text-gray-400 mt-1">Koniec: {calcEndTime(modal.start_time, Number(form.duration_minutes))}</p>
+              </div>
 
               {/* Type toggle */}
               <div className="flex gap-2">
