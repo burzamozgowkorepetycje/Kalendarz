@@ -1,5 +1,8 @@
 # PROJECT STATUS — Korepetycje Calendar
-_Ostatnia aktualizacja: 2026-06-26_
+_Ostatnia aktualizacja: 2026-06-26 (wieczór)_
+
+> **Deploy:** aplikacja działa na Vercel — `kalendarz-five.vercel.app`
+> **Repo:** github.com/burzamozgowkorepetycje/Kalendarz
 
 ---
 
@@ -213,19 +216,23 @@ korepetycje-calendar/
 - [x] SMS przez Twilio (skonfigurowany)
 - [x] Email przez Resend (skonfigurowany)
 - [x] Cron job (aktywny po deployu na Vercel)
+- [x] **Deploy na Vercel** (działa online)
+- [x] **Panel korepetytora** — login/hasło, siatka 6 sal, dodawanie własnych zajęć (bez kwot)
+- [x] **Admin ustawia login/hasło korepetytora** (zakładka Korepetytorzy → "Hasło")
+- [x] **Tagi zajęć** — rodzaj (kursy maturalne / indywidualne / grupowe) + przedmiot
+- [x] **Kompleksowe raporty** — osobne hasło, per korepetytor / rodzaj / przedmiot, przychód+koszt+zysk, eksport CSV, druk PDF
+- [x] **Widok tygodniowy** kalendarza (toggle Dzień/Tydzień)
+- [x] **Kredyt ucznia** — przy usuwaniu lekcji opcja odliczenia nadpłaty od przyszłego rachunku
 
 ---
 
 ## 8. CO ZOSTAŁO DO ZROBIENIA ❌
 
 ### Wysoki priorytet
-- [ ] **Deploy na Vercel** — aplikacja działa tylko lokalnie, nie jest dostępna online
 - [ ] **Weryfikacja domeny w Resend** — aktualnie emaile mogą trafić do spamu (brak własnej domeny)
 - [ ] **Weryfikacja numeru Twilio** — trial pozwala wysyłać SMS tylko na zweryfikowane numery
 
 ### Średni priorytet
-- [ ] **Widok tygodniowy w kalendarzu** — aktualnie tylko widok dzienny
-- [ ] **Eksport do PDF/Excel** — raporty można tylko przeglądać, nie można eksportować
 - [ ] **Powiadomienie przy zmianie/odwołaniu zajęć** — aktualnie tylko przy rezerwacji
 - [ ] **Historia zmian zajęć** — audit log (kto co zmienił)
 - [ ] **Możliwość anulowania pojedynczych zajęć z cyklu** bez usuwania całego cyklu
@@ -272,7 +279,20 @@ TWILIO_AUTH_TOKEN=...
 TWILIO_PHONE_NUMBER=+16093228635
 ADMIN_PASSWORD=admin123
 NEXT_PUBLIC_ADMIN_PASSWORD=admin123
+NEXT_PUBLIC_REPORTS_PASSWORD=admin1234   # osobne hasło do zakładki Raporty
 CRON_SECRET=...
+JWT_SECRET=...                           # sesje korepetytorów (panel /tutor)
+```
+
+> Te same zmienne muszą być dodane w **Vercel → Settings → Environment Variables**.
+
+### Migracje SQL wykonane w Supabase
+```sql
+ALTER TABLE tutors   ADD COLUMN IF NOT EXISTS login TEXT UNIQUE;
+ALTER TABLE tutors   ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE lessons  ADD COLUMN IF NOT EXISTS lesson_type TEXT;
+ALTER TABLE lessons  ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS credit_balance NUMERIC DEFAULT 0;
 ```
 
 ---
