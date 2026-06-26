@@ -246,9 +246,9 @@ export default function CalendarTab({ password }: { password: string }) {
   return (
     <div className="space-y-4">
       {/* Nav bar */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between gap-4">
+      <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
         {/* View toggle */}
-        <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
+        <div className="flex bg-gray-100 rounded-lg p-1 gap-1 self-center sm:self-auto">
           <button onClick={() => setView('day')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition ${view === 'day' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
             <Calendar size={15} /> Dzień
@@ -260,11 +260,11 @@ export default function CalendarTab({ password }: { password: string }) {
         </div>
 
         {/* Date navigation */}
-        <div className="flex items-center gap-2 flex-1 justify-center">
+        <div className="flex items-center gap-2 flex-1 justify-between sm:justify-center">
           <button onClick={view === 'day' ? prevDay : prevWeek} className="p-2 hover:bg-gray-100 rounded-lg">
             <ChevronLeft size={20} className="text-gray-700" />
           </button>
-          <div className="text-center min-w-[200px]">
+          <div className="text-center sm:min-w-[200px]">
             <p className="font-bold text-gray-900 capitalize text-sm">{view === 'day' ? dayLabel : weekLabel}</p>
             <button onClick={() => setCurrentDate(new Date())} className="text-xs text-blue-600 hover:underline">Dziś</button>
           </div>
@@ -272,7 +272,7 @@ export default function CalendarTab({ password }: { password: string }) {
             <ChevronRight size={20} className="text-gray-700" />
           </button>
         </div>
-        <div className="w-[120px]" />
+        <div className="hidden sm:block sm:w-[120px]" />
       </div>
 
       {/* DAY VIEW */}
