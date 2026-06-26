@@ -62,13 +62,15 @@ export default function TutorDashboard() {
 
   useEffect(() => { fetchCalendar(dateStr) }, [dateStr, fetchCalendar])
 
+  // dopasowanie po "kubełku godzinowym" — lekcja 12:30 trafia do wiersza 12:00
   const getLessonForSlot = (hour: string, room: string) =>
-    lessons.find(l => l.start_time?.substring(0, 5) === hour && l.room === room)
+    lessons.find(l => String(l.start_time ?? '').substring(0, 2) === hour.substring(0, 2) && l.room === room)
 
   const openSlot = (hour: string, room: string) => {
     const existing = getLessonForSlot(hour, room)
     if (existing && existing.tutor_id !== myTutorId) return // nie jego zajęcia — tylko podgląd już blokuje klik
-    setModal({ room, start_time: hour, existing })
+    const startTime = existing ? String(existing.start_time).substring(0, 5) : hour
+    setModal({ room, start_time: startTime, existing })
     setForm({ student_id: existing?.student_id || '', duration_minutes: existing?.duration_minutes || 60, lesson_type: existing?.lesson_type || '', subject: existing?.subject || '' })
     setError('')
   }
@@ -189,7 +191,7 @@ export default function TutorDashboard() {
                                 {isMine ? (lesson.students?.name || '—') : (lesson.tutors?.name || '—')}
                               </p>
                             </div>
-                            <p className="text-gray-500 text-xs">{lesson.duration_minutes} min</p>
+                            <p className="text-gray-500 text-xs">{String(lesson.start_time).substring(0,5)} · {lesson.duration_minutes} min</p>
                           </button>
                         </td>
                       )
@@ -226,6 +228,13 @@ export default function TutorDashboard() {
             </div>
 
             <div className="px-5 py-4 space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Godzina rozpoczęcia</label>
+                <input type="time" step={300} value={modal.start_time}
+                  onChange={e => setModal({ ...modal, start_time: e.target.value })}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500" />
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Uczeń</label>
                 <select
