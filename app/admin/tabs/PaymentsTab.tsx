@@ -10,6 +10,7 @@ interface PaymentRow {
   phone: string | null
   total_due: number
   total_paid: number
+  credit: number
   balance: number
 }
 
@@ -115,6 +116,9 @@ export default function PaymentsTab({ password }: { password: string }) {
                         <p className="text-sm text-gray-500">
                           Zapłacone: {row.total_paid} zł / {row.total_due} zł
                         </p>
+                        {row.credit > 0 && (
+                          <p className="text-sm text-emerald-600 font-medium">Kredyt (nadpłata): −{row.credit} zł</p>
+                        )}
                       </div>
                       <div className="flex items-center gap-2">
                         <p className="font-bold text-red-600 text-lg">{row.balance} zł</p>
@@ -150,7 +154,12 @@ export default function PaymentsTab({ password }: { password: string }) {
               <div className="divide-y divide-gray-100">
                 {paidRows.map(row => (
                   <div key={row.student_id} className="px-5 py-3 flex items-center justify-between">
-                    <p className="font-medium text-gray-900">{row.name}</p>
+                    <div>
+                      <p className="font-medium text-gray-900">{row.name}</p>
+                      {row.credit > 0 && (
+                        <p className="text-sm text-emerald-600 font-medium">Kredyt do wykorzystania: {row.credit} zł</p>
+                      )}
+                    </div>
                     <div className="flex items-center gap-2">
                       <CheckCircle size={16} className="text-green-500" />
                       <span className="text-sm text-green-600 font-medium">{row.total_paid} zł</span>

@@ -9,6 +9,7 @@ export async function GET(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
+  const type = searchParams.get('type')
   const from = searchParams.get('from') || '2000-01-01'
   const to = searchParams.get('to') || '2099-12-31'
   const paidOnly = searchParams.get('paid_only') === 'true'
@@ -198,15 +199,32 @@ export async function GET(req: NextRequest) {
     if (gs.payment_status === 'paid') studentMap[gs.student_id as string].total_paid += gs.amount_due ?? 0
   }
 
-  const students = Object.entries(studentMap).map(([id, v]) => ({
-    student_id: id,
-    name: v.name,
-    email: v.email,
-    phone: v.phone,
-    total_due: +v.total_due.toFixed(2),
-    total_paid: +v.total_paid.toFixed(2),
-    balance: +(v.total_due - v.total_paid).toFixed(2),
-  })).sort((a, b) => b.balance - a.balance)
+  // Credit balances per student
+  const { data: creditRows } = await supabaseAdmin
+    .from('students')
+    .select('id, credit_balance')
+  const creditMap: Record<string, number> = {}
+  for (const c of creditRows ?? []) creditMap[c.id as string] = Number(c.credit_balance) || 0
+
+  const students = Object.entries(studentMap).map(([id, v]) => {
+    const credit = creditMap[id] || 0
+    return {
+      student_id: id,
+      name: v.name,
+      email: v.email,
+      phone: v.phone,
+      total_due: +v.total_due.toFixed(2),
+      total_paid: +v.total_paid.toFixed(2),
+      credit: +credit.toFixed(2),
+      // saldo do zapłaty pomniejszone o kredyt ucznia
+      balance: +(v.total_due - v.total_paid - credit).toFixed(2),
+    }
+  }).sort((a, b) => b.balance - a.balance)
+
+  // Backward-compat: PaymentsTab oczekuje tablicy uczniów
+  if (type === 'payments') {
+    return NextResponse.json(students)
+  }
 
   return NextResponse.json({
     summary: {

@@ -41,6 +41,7 @@ export default function CalendarTab({ password }: { password: string }) {
   })
   const [groupEntries, setGroupEntries] = useState<GroupEntry[]>([{ student_id: '', amount_due: '' }])
   const [saving, setSaving] = useState(false)
+  const [deleteConfirm, setDeleteConfirm] = useState(false)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
   const dateStr = toDateStr(currentDate)
@@ -185,10 +186,11 @@ export default function CalendarTab({ password }: { password: string }) {
     setSaving(false)
   }
 
-  const handleDelete = async () => {
+  const handleDelete = async (credit: boolean) => {
     if (!modal?.lesson) return
-    await fetch(`/api/admin/lessons?id=${modal.lesson.id}`, { method: 'DELETE', headers })
+    await fetch(`/api/admin/lessons?id=${modal.lesson.id}&credit=${credit}`, { method: 'DELETE', headers })
     await loadLessons()
+    setDeleteConfirm(false)
     setModal(null)
   }
 
@@ -345,6 +347,33 @@ export default function CalendarTab({ password }: { password: string }) {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Potwierdzenie usuwania z opcją kredytu */}
+      {modal?.lesson && deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="font-bold text-gray-900 text-lg mb-2">Usunąć zajęcia?</h3>
+            <p className="text-sm text-gray-600 mb-5">
+              Jeśli uczeń zapłacił już za tę lekcję, możesz odliczyć jej kwotę
+              od następnego rachunku (nadpłata zostanie zapisana jako kredyt ucznia).
+            </p>
+            <div className="space-y-2">
+              <button onClick={() => handleDelete(true)}
+                className="w-full py-2.5 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700">
+                Usuń i odlicz uczniowi (kredyt)
+              </button>
+              <button onClick={() => handleDelete(false)}
+                className="w-full py-2.5 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700">
+                Usuń bez odliczania
+              </button>
+              <button onClick={() => setDeleteConfirm(false)}
+                className="w-full py-2.5 rounded-lg text-sm font-medium text-gray-600 border border-gray-300 hover:bg-gray-50">
+                Anuluj
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -512,7 +541,7 @@ export default function CalendarTab({ password }: { password: string }) {
 
             <div className="flex gap-3 px-6 py-4 border-t border-gray-200 sticky bottom-0 bg-white">
               {modal.lesson && (
-                <button onClick={handleDelete} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition">Usuń</button>
+                <button onClick={() => setDeleteConfirm(true)} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition">Usuń</button>
               )}
               <div className="flex-1" />
               <button onClick={() => setModal(null)} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
