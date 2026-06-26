@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { logAudit, describeLesson } from '@/lib/audit'
 
 function verifyAdmin(req: NextRequest) {
   return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
@@ -92,6 +93,12 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await logAudit({
+    actor_type: 'admin', actor_name: 'Administracja', action: 'create',
+    summary: `Dodano zajęcia: ${await describeLesson(data)}`,
+  })
+
   return NextResponse.json(data)
 }
 
@@ -119,6 +126,12 @@ export async function PUT(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await logAudit({
+    actor_type: 'admin', actor_name: 'Administracja', action: 'update',
+    summary: `Edytowano zajęcia: ${await describeLesson(data)}`,
+  })
+
   return NextResponse.json(data)
 }
 
@@ -176,10 +189,26 @@ export async function DELETE(req: NextRequest) {
     }
   }
 
+  // Opis do historii (dopóki lekcja jeszcze istnieje)
+  const { data: labelLesson } = await supabaseAdmin
+    .from('lessons')
+    .select('date, start_time, room, student_id, is_group')
+    .eq('id', id)
+    .single()
+  const label = labelLesson ? await describeLesson(labelLesson) : ''
+
   // Usuń powiązanych uczniów grupowych, potem lekcje
   await supabaseAdmin.from('lesson_students').delete().in('lesson_id', targetIds)
   const { error } = await supabaseAdmin.from('lessons').delete().in('id', targetIds)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await logAudit({
+    actor_type: 'admin', actor_name: 'Administracja', action: 'delete',
+    summary: targetIds.length > 1
+      ? `Usunięto ${targetIds.length} zajęć z cyklu (od: ${label})`
+      : `Usunięto zajęcia: ${label}`,
+  })
+
   return NextResponse.json({ success: true, deleted: targetIds.length })
 }
 

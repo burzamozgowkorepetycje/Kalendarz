@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'Burza Mózgów — Korepetycje',
     short_name: 'Burza Mózgów',
     description: 'Panel zarządzania korepetycjami — kalendarz, uczniowie, płatności.',
-    start_url: '/admin',
+    start_url: '/',
     display: 'standalone',
     orientation: 'portrait',
     background_color: '#f9fafb',

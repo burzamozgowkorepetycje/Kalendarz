@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { verifyTutorToken } from '@/app/api/tutor/auth/route'
+import { logAudit, describeLesson } from '@/lib/audit'
 
 export async function GET(req: NextRequest) {
   const tutor = verifyTutorToken(req)
@@ -78,6 +79,11 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+    await logAudit({
+      actor_type: 'tutor', actor_name: tutor.name, action: 'create',
+      summary: `Dodano zajęcia: ${await describeLesson({ date, start_time, room, student_id, is_group: false })}`,
+    })
+
     return NextResponse.json(data)
   } catch {
     return NextResponse.json({ error: 'Błąd serwera' }, { status: 500 })
@@ -92,6 +98,14 @@ export async function DELETE(req: NextRequest) {
   const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Brak id' }, { status: 400 })
 
+  // Opis do historii zanim usuniemy
+  const { data: labelLesson } = await supabaseAdmin
+    .from('lessons')
+    .select('date, start_time, room, student_id, is_group')
+    .eq('id', id)
+    .eq('tutor_id', tutor.tutorId)
+    .single()
+
   const { error } = await supabaseAdmin
     .from('lessons')
     .delete()
@@ -99,5 +113,11 @@ export async function DELETE(req: NextRequest) {
     .eq('tutor_id', tutor.tutorId)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await logAudit({
+    actor_type: 'tutor', actor_name: tutor.name, action: 'delete',
+    summary: `Usunięto zajęcia: ${labelLesson ? await describeLesson(labelLesson) : ''}`,
+  })
+
   return NextResponse.json({ success: true })
 }
