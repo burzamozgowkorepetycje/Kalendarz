@@ -60,16 +60,16 @@ export default function AttendanceTab({ password }: { password: string }) {
         ) : (
           <div className="divide-y divide-gray-100">
             {lessons.map(lesson => (
-              <div key={lesson.id} className="px-6 py-4">
-                <div className="flex items-center justify-between">
+              <div key={lesson.id} className="px-4 sm:px-6 py-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                   <div>
-                    <p className="font-medium">{lesson.students?.name ?? '—'}</p>
+                    <p className="font-medium text-gray-900">{lesson.students?.name ?? '—'}</p>
                     <p className="text-sm text-gray-500">
-                      {lesson.start_time} · {lesson.duration_minutes} min · {lesson.tutors?.name}
+                      {String(lesson.start_time).substring(0,5)} · {lesson.duration_minutes} min · {lesson.tutors?.name}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
                     {/* Attendance */}
                     <div className="flex gap-1">
                       <button
