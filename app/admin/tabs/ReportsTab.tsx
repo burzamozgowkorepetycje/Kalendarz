@@ -131,13 +131,18 @@ export default function ReportsTab({ password }: { password: string }) {
   const sendReminder = async (student: StudentRow) => {
     if (!student.email && !student.phone) { alert('Uczeń nie ma email ani telefonu'); return }
     setSendingReminder(student.student_id)
-    await fetch('/api/admin/send-reminder', {
+    const res = await fetch('/api/admin/send-reminder', {
       method: 'POST',
       headers,
       body: JSON.stringify({ student_id: student.student_id, amount: student.balance }),
     })
     setSendingReminder(null)
-    alert(`Przypomnienie wysłane do ${student.name}`)
+    if (res.ok) {
+      alert(`Przypomnienie wysłane do ${student.name}`)
+    } else {
+      const data = await res.json().catch(() => ({}))
+      alert(`Nie udało się wysłać: ${data.error || 'błąd serwera'}`)
+    }
   }
 
   // Password gate

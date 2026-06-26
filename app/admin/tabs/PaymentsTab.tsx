@@ -48,13 +48,18 @@ export default function PaymentsTab({ password }: { password: string }) {
 
   const sendReminder = async (row: PaymentRow) => {
     setSending(row.student_id)
-    await fetch('/api/admin/send-reminder', {
+    const res = await fetch('/api/admin/send-reminder', {
       method: 'POST',
       headers,
       body: JSON.stringify({ student_id: row.student_id, amount: row.balance }),
     })
     setSending(null)
-    alert(`Przypomnienie wysłane do ${row.name}`)
+    if (res.ok) {
+      alert(`Przypomnienie wysłane do ${row.name}`)
+    } else {
+      const data = await res.json().catch(() => ({}))
+      alert(`Nie udało się wysłać: ${data.error || 'błąd serwera'}`)
+    }
   }
 
   const totalBalance = rows.reduce((s, r) => s + r.balance, 0)

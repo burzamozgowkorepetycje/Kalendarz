@@ -24,8 +24,19 @@ export async function POST(req: NextRequest) {
     await sendPaymentReminderEmail(student.email, student.name, amount)
   }
 
+  let sms: { ok: boolean; error?: string } | null = null
   if (student.phone) {
-    await sendSMS(student.phone, `Przypomnienie o płatności: masz ${amount} zł do uregulowania za korepetycje.`)
+    sms = await sendSMS(student.phone, `Przypomnienie o platnosci: masz ${amount} zl do uregulowania za korepetycje.`)
+  }
+
+  // Jeśli uczeń nie ma żadnego kanału kontaktu
+  if (!student.email && !student.phone) {
+    return NextResponse.json({ error: 'Uczeń nie ma email ani telefonu' }, { status: 400 })
+  }
+
+  // Jeśli SMS się nie powiódł — zgłoś to do UI
+  if (sms && !sms.ok) {
+    return NextResponse.json({ error: `SMS nie wysłany: ${sms.error}` }, { status: 502 })
   }
 
   return NextResponse.json({ success: true })

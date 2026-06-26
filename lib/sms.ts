@@ -14,13 +14,19 @@ function normalizePhone(raw: string): string {
   return digits
 }
 
-export async function sendSMS(to: string, message: string) {
+export interface SMSResult {
+  ok: boolean
+  error?: string
+}
+
+export async function sendSMS(to: string, message: string): Promise<SMSResult> {
   const token = process.env.SMSAPI_TOKEN
   const from = process.env.SMSAPI_SENDER || 'Test'
 
   if (!token) {
-    console.error('SMS error: brak SMSAPI_TOKEN')
-    return
+    const error = 'Brak konfiguracji SMSAPI_TOKEN na serwerze'
+    console.error('SMS error:', error)
+    return { ok: false, error }
   }
 
   const params = new URLSearchParams({
@@ -45,9 +51,15 @@ export async function sendSMS(to: string, message: string) {
 
     // SMSAPI zwraca { error, message } przy błędzie, { count, list } przy sukcesie
     if (data.error) {
-      console.error(`SMS error [SMSAPI ${data.error}]:`, data.message)
+      const error = `SMSAPI ${data.error}: ${data.message || 'błąd wysyłki'}`
+      console.error('SMS error:', error)
+      return { ok: false, error }
     }
+
+    return { ok: true }
   } catch (error) {
-    console.error('SMS error:', error)
+    const msg = error instanceof Error ? error.message : 'nieznany błąd sieci'
+    console.error('SMS error:', msg)
+    return { ok: false, error: msg }
   }
 }
