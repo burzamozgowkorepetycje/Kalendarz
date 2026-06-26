@@ -3,6 +3,8 @@
 import { Suspense } from 'react'
 import BookingContent from './BookingContent'
 
+export const dynamic = 'force-dynamic'
+
 export default function BookingPage() {
   return (
     <Suspense
