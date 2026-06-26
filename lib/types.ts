@@ -46,6 +46,7 @@ export interface Lesson {
   tutor_amount: number | null
   lesson_type: string | null
   subject: string | null
+  series_id: string | null
   created_at: string
   // joins
   tutors?: Pick<Tutor, 'name' | 'email' | 'phone'>

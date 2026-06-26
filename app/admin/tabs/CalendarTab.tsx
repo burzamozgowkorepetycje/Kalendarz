@@ -42,6 +42,7 @@ export default function CalendarTab({ password }: { password: string }) {
   const [groupEntries, setGroupEntries] = useState<GroupEntry[]>([{ student_id: '', amount_due: '' }])
   const [saving, setSaving] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [deleteScope, setDeleteScope] = useState<'this' | 'future' | 'all'>('this')
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
   const dateStr = toDateStr(currentDate)
@@ -114,7 +115,7 @@ export default function CalendarTab({ password }: { password: string }) {
     return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
   }
 
-  const createLesson = async (date: string) => {
+  const createLesson = async (date: string, series_id?: string | null) => {
     if (!modal) return
     const endTime = calcEndTime(modal.start_time, Number(form.duration_minutes))
     const body = {
@@ -128,6 +129,7 @@ export default function CalendarTab({ password }: { password: string }) {
       status: form.tutor_id ? 'booked' : 'available',
       lesson_type: form.lesson_type || null,
       subject: form.subject || null,
+      series_id: series_id || null,
     }
     const res = await fetch('/api/admin/lessons', { method: 'POST', headers, body: JSON.stringify(body) })
     const lesson = await res.json()
@@ -173,10 +175,11 @@ export default function CalendarTab({ password }: { password: string }) {
       }
     } else if (form.repeat) {
       const weeks = Number(form.repeat_weeks)
+      const seriesId = crypto.randomUUID()
       for (let i = 0; i < weeks; i++) {
         const d = new Date(modal.date)
         d.setDate(d.getDate() + i * 7)
-        await createLesson(toDateStr(d))
+        await createLesson(toDateStr(d), seriesId)
       }
     } else {
       await createLesson(modal.date)
@@ -188,9 +191,11 @@ export default function CalendarTab({ password }: { password: string }) {
 
   const handleDelete = async (credit: boolean) => {
     if (!modal?.lesson) return
-    await fetch(`/api/admin/lessons?id=${modal.lesson.id}&credit=${credit}`, { method: 'DELETE', headers })
+    const scope = modal.lesson.series_id ? deleteScope : 'this'
+    await fetch(`/api/admin/lessons?id=${modal.lesson.id}&credit=${credit}&scope=${scope}`, { method: 'DELETE', headers })
     await loadLessons()
     setDeleteConfirm(false)
+    setDeleteScope('this')
     setModal(null)
   }
 
@@ -264,6 +269,7 @@ export default function CalendarTab({ password }: { password: string }) {
                             <div className="flex items-center gap-1 mb-0.5">
                               {lesson.is_group ? <Users size={10} /> : <User size={10} />}
                               <p className="font-semibold truncate">{tutors.find(t => t.id === lesson.tutor_id)?.name || '—'}</p>
+                              {lesson.series_id && <RefreshCw size={9} className="shrink-0 opacity-60" />}
                             </div>
                             {!lesson.is_group && <p className="truncate opacity-80">{students.find(s => s.id === lesson.student_id)?.name || '—'}</p>}
                             {lesson.is_group && <p className="opacity-80">Grupa</p>}
@@ -355,8 +361,28 @@ export default function CalendarTab({ password }: { password: string }) {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
             <h3 className="font-bold text-gray-900 text-lg mb-2">Usunąć zajęcia?</h3>
+
+            {/* Wybór zakresu — tylko gdy lekcja należy do cyklu */}
+            {modal.lesson?.series_id && (
+              <div className="mb-4 border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-2">
+                <p className="text-xs font-semibold text-gray-500 uppercase">Zakres (zajęcia cykliczne)</p>
+                {([
+                  { val: 'this', label: 'Tylko te zajęcia' },
+                  { val: 'future', label: 'Te i wszystkie przyszłe z cyklu' },
+                  { val: 'all', label: 'Cały cykl (też przeszłe)' },
+                ] as const).map(opt => (
+                  <label key={opt.val} className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                    <input type="radio" name="deleteScope" checked={deleteScope === opt.val}
+                      onChange={() => setDeleteScope(opt.val)}
+                      className="w-4 h-4 text-red-600" />
+                    {opt.label}
+                  </label>
+                ))}
+              </div>
+            )}
+
             <p className="text-sm text-gray-600 mb-5">
-              Jeśli uczeń zapłacił już za tę lekcję, możesz odliczyć jej kwotę
+              Jeśli uczeń zapłacił już za {deleteScope === 'this' ? 'tę lekcję' : 'te lekcje'}, możesz odliczyć kwotę
               od następnego rachunku (nadpłata zostanie zapisana jako kredyt ucznia).
             </p>
             <div className="space-y-2">
@@ -541,7 +567,7 @@ export default function CalendarTab({ password }: { password: string }) {
 
             <div className="flex gap-3 px-6 py-4 border-t border-gray-200 sticky bottom-0 bg-white">
               {modal.lesson && (
-                <button onClick={() => setDeleteConfirm(true)} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition">Usuń</button>
+                <button onClick={() => { setDeleteScope('this'); setDeleteConfirm(true) }} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition">Usuń</button>
               )}
               <div className="flex-1" />
               <button onClick={() => setModal(null)} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>

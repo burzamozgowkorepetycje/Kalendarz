@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  const { date, start_time, end_time, duration_minutes, tutor_id, student_id, amount_due, room } = body
+  const { date, start_time, end_time, duration_minutes } = body
 
   if (!date || !start_time || !end_time || !duration_minutes) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -44,11 +44,16 @@ export async function POST(req: NextRequest) {
     .from('lessons')
     .insert({
       date, start_time, end_time, duration_minutes,
-      tutor_id: tutor_id || null,
-      student_id: student_id || null,
-      amount_due: amount_due || null,
-      room: room || 'Sala 1',
-      status: tutor_id && student_id ? 'booked' : 'available',
+      tutor_id: body.tutor_id || null,
+      student_id: body.student_id || null,
+      amount_due: body.amount_due ?? null,
+      tutor_amount: body.tutor_amount ?? null,
+      room: body.room || 'Sala 1',
+      is_group: body.is_group ?? false,
+      lesson_type: body.lesson_type ?? null,
+      subject: body.subject ?? null,
+      series_id: body.series_id ?? null,
+      status: body.status || (body.tutor_id ? 'booked' : 'available'),
       payment_status: 'unpaid',
       reminder_sent: false,
     })
@@ -82,33 +87,59 @@ export async function DELETE(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
   const credit = searchParams.get('credit') === 'true'
+  // zakres usuwania w obrębie cyklu: 'this' (domyślnie) | 'future' | 'all'
+  const scope = searchParams.get('scope') || 'this'
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-  // Opcjonalnie: dolicz kwotę lekcji do salda kredytu ucznia (nadpłata)
-  if (credit) {
-    const { data: lesson } = await supabaseAdmin
-      .from('lessons')
-      .select('student_id, amount_due, is_group')
-      .eq('id', id)
-      .single()
+  // Pobierz lekcję wskazaną (potrzebny series_id i date do zakresu)
+  const { data: target } = await supabaseAdmin
+    .from('lessons')
+    .select('id, date, series_id')
+    .eq('id', id)
+    .single()
 
-    if (lesson?.is_group) {
-      // grupowe — każdy uczeń dostaje swój kredyt
-      const { data: ls } = await supabaseAdmin
-        .from('lesson_students')
-        .select('student_id, amount_due')
-        .eq('lesson_id', id)
-      for (const entry of ls ?? []) {
-        await addCredit(entry.student_id as string, Number(entry.amount_due) || 0)
+  if (!target) return NextResponse.json({ error: 'Lesson not found' }, { status: 404 })
+
+  // Wyznacz listę lekcji do usunięcia
+  let targetIds: string[] = [id]
+  if (scope !== 'this' && target.series_id) {
+    let q = supabaseAdmin
+      .from('lessons')
+      .select('id')
+      .eq('series_id', target.series_id)
+    if (scope === 'future') q = q.gte('date', target.date)
+    const { data: seriesLessons } = await q
+    targetIds = (seriesLessons ?? []).map(l => l.id as string)
+    if (targetIds.length === 0) targetIds = [id]
+  }
+
+  // Opcjonalnie: dolicz kwoty do salda kredytu uczniów (nadpłata)
+  if (credit) {
+    const { data: lessonsToCredit } = await supabaseAdmin
+      .from('lessons')
+      .select('id, student_id, amount_due, is_group')
+      .in('id', targetIds)
+
+    for (const lesson of lessonsToCredit ?? []) {
+      if (lesson.is_group) {
+        const { data: ls } = await supabaseAdmin
+          .from('lesson_students')
+          .select('student_id, amount_due')
+          .eq('lesson_id', lesson.id)
+        for (const entry of ls ?? []) {
+          await addCredit(entry.student_id as string, Number(entry.amount_due) || 0)
+        }
+      } else if (lesson.student_id) {
+        await addCredit(lesson.student_id as string, Number(lesson.amount_due) || 0)
       }
-    } else if (lesson?.student_id) {
-      await addCredit(lesson.student_id as string, Number(lesson.amount_due) || 0)
     }
   }
 
-  const { error } = await supabaseAdmin.from('lessons').delete().eq('id', id)
+  // Usuń powiązanych uczniów grupowych, potem lekcje
+  await supabaseAdmin.from('lesson_students').delete().in('lesson_id', targetIds)
+  const { error } = await supabaseAdmin.from('lessons').delete().in('id', targetIds)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  return NextResponse.json({ success: true, deleted: targetIds.length })
 }
 
 async function addCredit(studentId: string, amount: number) {

@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
   if (!tutor) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
-    const { date, start_time, duration_minutes, room, student_id } = await req.json()
+    const { date, start_time, duration_minutes, room, student_id, lesson_type, subject } = await req.json()
 
     if (!date || !start_time || !duration_minutes || !room || !student_id) {
       return NextResponse.json({ error: 'Brak wymaganych pól' }, { status: 400 })
@@ -56,6 +56,8 @@ export async function POST(req: NextRequest) {
         status: 'booked',
         is_group: false,
         payment_status: 'unpaid',
+        lesson_type: lesson_type ?? null,
+        subject: subject ?? null,
       })
       .select('id, date, start_time, end_time, duration_minutes, room, status, student_id, students(name)')
       .single()
