@@ -32,22 +32,21 @@ export async function GET(req: NextRequest) {
     if (!student || !tutor) continue
 
     const dateStr = new Date(lesson.date).toLocaleDateString('pl-PL')
-    const msg = `Przypomnienie: jutro zajęcia z ${tutor.name} o ${lesson.start_time}. Data: ${dateStr}`
+    const time = String(lesson.start_time).slice(0, 5)
 
-    // Email to student
+    // Email to student (pełna polszczyzna)
     if (student.email) {
       await sendReminderEmail(student.email, student.name, dateStr, lesson.start_time, tutor.name)
     }
 
-    // SMS to student
+    // SMS to student — bez polskich znaków (1 segment = tańszy SMS)
     if (student.phone) {
-      await sendSMS(student.phone, msg)
+      await sendSMS(student.phone, `Przypomnienie: jutro o ${time} masz zajecia z ${tutor.name}. (${dateStr})`)
     }
 
-    // SMS to tutor
+    // SMS to tutor — bez polskich znaków
     if (tutor.phone) {
-      const tutorMsg = `Przypomnienie: jutro masz zajęcia z ${student.name} o ${lesson.start_time}.`
-      await sendSMS(tutor.phone, tutorMsg)
+      await sendSMS(tutor.phone, `Przypomnienie: jutro o ${time} masz zajecia z ${student.name}.`)
     }
 
     await supabaseAdmin
