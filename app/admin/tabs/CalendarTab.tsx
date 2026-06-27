@@ -147,7 +147,8 @@ export default function CalendarTab({ password }: { password: string }) {
   }
 
   // dostępność korepetytora online w danej godzinie (dla siatki online)
-  const onlineTutors = tutors.filter(t => t.meet_link)
+  const onlineLessonTutorIds = new Set(lessons.map(l => l.tutor_id))
+  const onlineTutors = tutors.filter(t => t.meet_link || onlineLessonTutorIds.has(t.id))
   const tutorAvailableAt = (tutorId: string, hour: string) => {
     const rows = availAll.filter(a => a.tutor_id === tutorId)
     if (rows.length === 0) return true
