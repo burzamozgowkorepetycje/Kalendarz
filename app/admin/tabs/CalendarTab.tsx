@@ -353,7 +353,7 @@ export default function CalendarTab({ password }: { password: string }) {
     const res = await fetch('/api/admin/send-meet', { method: 'POST', headers, body: JSON.stringify({ lesson_id: lessonId }) })
     const data = await res.json().catch(() => ({}))
     setSendingMeet(null)
-    alert(res.ok ? `Link Meet wysłany (${data.sent} SMS)` : `Nie wysłano: ${data.error || 'błąd'}`)
+    alert(res.ok ? `Link Meet wysłany emailem (${data.sent})` : `Nie wysłano: ${data.error || 'błąd'}`)
   }
 
   const prevDay = () => { const d = new Date(currentDate); d.setDate(d.getDate() - 1); setCurrentDate(d) }

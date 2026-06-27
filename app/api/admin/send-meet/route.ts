@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-import { sendSMS } from '@/lib/sms'
+import { sendMeetEmail } from '@/lib/email'
 
 function verifyAdmin(req: NextRequest) {
   return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
   const { data: lesson } = await supabaseAdmin
     .from('lessons')
-    .select('date, start_time, is_group, student_id, tutors(name, meet_link), students(name, phone), lesson_students(students(name, phone))')
+    .select('date, start_time, is_group, student_id, tutors(name, meet_link), students(name, email), lesson_students(students(name, email))')
     .eq('id', lesson_id)
     .single()
 
@@ -28,31 +28,29 @@ export async function POST(req: NextRequest) {
 
   const time = String(lesson.start_time).substring(0, 5)
   const date = new Date(lesson.date + 'T00:00:00').toLocaleDateString('pl-PL')
-  const msg = `Zajecia online ${date} o ${time} z ${tutor.name}. Link: ${link}`
 
-  // odbiorcy: uczeń indywidualny lub wszyscy z grupy
-  const recipients: { phone: string | null }[] = []
+  const recipients: { name: string; email: string }[] = []
   if (lesson.is_group) {
-    for (const ls of (lesson.lesson_students as unknown as { students?: { phone: string | null } }[] | null) ?? []) {
-      if (ls.students?.phone) recipients.push({ phone: ls.students.phone })
+    for (const ls of (lesson.lesson_students as unknown as { students?: { name: string; email: string | null } }[] | null) ?? []) {
+      if (ls.students?.email) recipients.push({ name: ls.students.name, email: ls.students.email })
     }
   } else {
-    const s = lesson.students as unknown as { phone: string | null } | null
-    if (s?.phone) recipients.push({ phone: s.phone })
+    const s = lesson.students as unknown as { name: string; email: string | null } | null
+    if (s?.email) recipients.push({ name: s.name, email: s.email })
   }
 
   if (recipients.length === 0) {
-    return NextResponse.json({ error: 'Uczeń nie ma numeru telefonu do wysyłki SMS.' }, { status: 400 })
+    return NextResponse.json({ error: 'Uczeń nie ma adresu email do wysyłki linku.' }, { status: 400 })
   }
 
   let ok = 0
+  let lastErr = ''
   for (const r of recipients) {
-    if (r.phone) {
-      const res = await sendSMS(r.phone, msg)
-      if (res.ok) ok++
-    }
+    const res = await sendMeetEmail(r.email, r.name, tutor.name, date, time, link)
+    if (res.ok) ok++
+    else lastErr = res.error || 'błąd'
   }
 
-  if (ok === 0) return NextResponse.json({ error: 'Nie udało się wysłać SMS-a.' }, { status: 502 })
+  if (ok === 0) return NextResponse.json({ error: `Nie wysłano: ${lastErr}` }, { status: 502 })
   return NextResponse.json({ success: true, sent: ok })
 }

@@ -51,6 +51,30 @@ export async function sendPaymentReminderEmail(
   }
 }
 
+export async function sendMeetEmail(to: string, studentName: string, tutorName: string, date: string, time: string, link: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { error } = await resend.emails.send({
+      from: FROM,
+      to,
+      subject: `Link do zajęć online — ${date} ${time}`,
+      html: `
+        <p>Cześć ${studentName},</p>
+        <p>Twoje zajęcia online z <strong>${tutorName}</strong>:</p>
+        <ul>
+          <li><strong>Data:</strong> ${date}</li>
+          <li><strong>Godzina:</strong> ${time}</li>
+        </ul>
+        <p><a href="${link}">Dołącz do spotkania (Google Meet)</a></p>
+        <p>${link}</p>
+      `,
+    })
+    if (error) return { ok: false, error: error.message || 'Błąd Resend' }
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Błąd email' }
+  }
+}
+
 export async function sendBookingConfirmation(
   tutorEmail: string,
   tutorName: string,
