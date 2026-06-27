@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
 
   // Miękkie ostrzeżenie o dostępności (można pominąć przez ack_warnings lub wymuszenie)
   if (body.force !== true && body.ack_warnings !== true) {
-    const warnings = await availabilityWarnings({ tutor_id: body.tutor_id || null, date, start_time, end_time })
+    const warnings = await availabilityWarnings({ tutor_id: body.tutor_id || null, date, start_time, end_time, subject: body.subject || null })
     if (warnings.length > 0) {
       return NextResponse.json({ warning: true, warnings }, { status: 409 })
     }
@@ -135,7 +135,7 @@ export async function PUT(req: NextRequest) {
 
     // Miękkie ostrzeżenie o dostępności
     if (force !== true && ack_warnings !== true) {
-      const warnings = await availabilityWarnings({ tutor_id: fields.tutor_id || null, date: fields.date, start_time: fields.start_time, end_time: fields.end_time })
+      const warnings = await availabilityWarnings({ tutor_id: fields.tutor_id || null, date: fields.date, start_time: fields.start_time, end_time: fields.end_time, subject: fields.subject || null })
       if (warnings.length > 0) {
         return NextResponse.json({ warning: true, warnings }, { status: 409 })
       }

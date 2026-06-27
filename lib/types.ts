@@ -6,6 +6,9 @@ export interface Tutor {
   unique_link: string
   hourly_rate: number | null
   meet_link: string | null
+  subjects: string[] | null
+  works_online: boolean
+  works_onsite: boolean
   rate_individual: number | null
   rate_pair: number | null
   rate_group: number | null

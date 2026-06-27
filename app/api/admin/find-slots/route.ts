@@ -42,8 +42,14 @@ export async function POST(req: NextRequest) {
   const lessons = (lessonsData ?? []) as LessonRow[]
 
   // Korepetytorzy + ich dostępność tygodniowa
-  const { data: tutorsData } = await supabaseAdmin.from('tutors').select('id, name, active')
-  const tutors = (tutorsData ?? []).filter(t => t.active !== false)
+  const subject: string | null = body.subject || null
+  const { data: tutorsData } = await supabaseAdmin.from('tutors').select('id, name, active, subjects, works_onsite')
+  const tutors = (tutorsData ?? []).filter(t => {
+    if (t.active === false) return false
+    if (t.works_onsite === false) return false // znajdź termin = stacjonarnie
+    if (subject && Array.isArray(t.subjects) && t.subjects.length > 0 && !t.subjects.includes(subject)) return false
+    return true
+  })
   const { data: availData } = await supabaseAdmin.from('tutor_availability').select('tutor_id, weekday, start_time, end_time')
   const availByTutor: Record<string, { weekday: number; start_time: string; end_time: string }[]> = {}
   for (const a of availData ?? []) (availByTutor[a.tutor_id as string] ||= []).push(a)

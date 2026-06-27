@@ -6,6 +6,8 @@ import { Tutor } from '@/lib/types'
 import AvailabilityEditor, { Slot } from '@/app/components/AvailabilityEditor'
 import RateInputs, { Rates, EMPTY_RATES, ratesToNumbers } from '@/app/components/RateInputs'
 
+const SUBJECTS = ['Matematyka', 'Angielski', 'Polski', 'Hiszpański', 'Geografia', 'Biologia', 'Chemia', 'WOS']
+
 interface PasswordModal {
   tutorId: string
   tutorName: string
@@ -21,6 +23,9 @@ export default function TutorsTab({ password }: { password: string }) {
   const [ratesModal, setRatesModal] = useState<{ id: string; name: string } | null>(null)
   const [editRates, setEditRates] = useState<Rates>(EMPTY_RATES)
   const [editMeet, setEditMeet] = useState('')
+  const [editSubjects, setEditSubjects] = useState<string[]>([])
+  const [editOnline, setEditOnline] = useState(true)
+  const [editOnsite, setEditOnsite] = useState(true)
   const [savingRates, setSavingRates] = useState(false)
   const [pwForm, setPwForm] = useState({ login: '', password: '', password2: '' })
   const [pwLoading, setPwLoading] = useState(false)
@@ -59,6 +64,9 @@ export default function TutorsTab({ password }: { password: string }) {
       rate_group: tutor.rate_group != null ? String(tutor.rate_group) : '',
     })
     setEditMeet(tutor.meet_link || '')
+    setEditSubjects(Array.isArray(tutor.subjects) ? tutor.subjects : [])
+    setEditOnline(tutor.works_online ?? true)
+    setEditOnsite(tutor.works_onsite ?? true)
   }
 
   const saveRates = async () => {
@@ -66,7 +74,7 @@ export default function TutorsTab({ password }: { password: string }) {
     setSavingRates(true)
     const res = await fetch('/api/admin/tutors', {
       method: 'PUT', headers,
-      body: JSON.stringify({ id: ratesModal.id, ...ratesToNumbers(editRates), meet_link: editMeet || null }),
+      body: JSON.stringify({ id: ratesModal.id, ...ratesToNumbers(editRates), meet_link: editMeet || null, subjects: editSubjects, works_online: editOnline, works_onsite: editOnsite }),
     })
     if (res.ok) {
       const updated = await res.json()
@@ -203,6 +211,29 @@ export default function TutorsTab({ password }: { password: string }) {
             </div>
             <p className="text-sm text-gray-500 mb-4">{ratesModal.name} — sugerowana wypłata za lekcję</p>
             <RateInputs value={editRates} onChange={setEditRates} />
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-gray-500 mb-1">Przedmioty (czego uczy)</label>
+              <div className="flex flex-wrap gap-1.5">
+                {SUBJECTS.map(s => {
+                  const on = editSubjects.includes(s)
+                  return (
+                    <button key={s} type="button"
+                      onClick={() => setEditSubjects(on ? editSubjects.filter(x => x !== s) : [...editSubjects, s])}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border ${on ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600'}`}>
+                      {s}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            <div className="mt-3 flex gap-4">
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" checked={editOnsite} onChange={e => setEditOnsite(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-blue-600" /> Stacjonarnie
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" checked={editOnline} onChange={e => setEditOnline(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-blue-600" /> Online
+              </label>
+            </div>
             <div className="mt-3">
               <label className="block text-xs font-medium text-gray-500 mb-1">Link Google Meet (zajęcia online)</label>
               <input value={editMeet} onChange={e => setEditMeet(e.target.value)}
