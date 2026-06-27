@@ -5,7 +5,7 @@ import { Plus, Trash2, BookOpen } from 'lucide-react'
 import { Student, Lesson } from '@/lib/types'
 import RateInputs, { Rates, EMPTY_RATES, ratesToNumbers } from '@/app/components/RateInputs'
 
-export default function StudentsTab({ password }: { password: string }) {
+export default function StudentsTab({ password, focusStudentId }: { password: string; focusStudentId?: string | null }) {
   const [students, setStudents] = useState<Student[]>([])
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [history, setHistory] = useState<Lesson[]>([])
@@ -20,6 +20,14 @@ export default function StudentsTab({ password }: { password: string }) {
   useEffect(() => {
     fetch('/api/admin/students', { headers }).then(r => r.json()).then(setStudents)
   }, [])
+
+  // Wybór ucznia z wyszukiwarki globalnej
+  useEffect(() => {
+    if (!focusStudentId || students.length === 0) return
+    const s = students.find(x => x.id === focusStudentId)
+    if (s) loadHistory(s)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusStudentId, students])
 
   const loadHistory = async (student: Student) => {
     setSelectedStudent(student)

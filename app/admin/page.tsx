@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Eye, EyeOff } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Eye, EyeOff, Search, User, GraduationCap } from 'lucide-react'
 import TutorsTab from './tabs/TutorsTab'
 import StudentsTab from './tabs/StudentsTab'
 import AttendanceTab from './tabs/AttendanceTab'
@@ -28,6 +28,31 @@ export default function AdminPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [activeTab, setActiveTab] = useState('calendar')
   const [error, setError] = useState('')
+  const [searchQ, setSearchQ] = useState('')
+  const [results, setResults] = useState<{ students: { id: string; name: string; phone: string | null }[]; tutors: { id: string; name: string; phone: string | null }[] }>({ students: [], tutors: [] })
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [focusStudentId, setFocusStudentId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (searchQ.trim().length < 2) { setResults({ students: [], tutors: [] }); return }
+    const t = setTimeout(async () => {
+      const res = await fetch(`/api/admin/search?q=${encodeURIComponent(searchQ)}`, {
+        headers: { Authorization: `Bearer ${password}` },
+      })
+      if (res.ok) setResults(await res.json())
+    }, 250)
+    return () => clearTimeout(t)
+  }, [searchQ, password])
+
+  const goToStudent = (id: string) => {
+    setFocusStudentId(id)
+    setActiveTab('students')
+    setSearchQ(''); setSearchOpen(false)
+  }
+  const goToTutor = () => {
+    setActiveTab('tutors')
+    setSearchQ(''); setSearchOpen(false)
+  }
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault()
@@ -82,11 +107,63 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Top bar */}
-      <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex justify-between items-center">
-        <h1 className="text-lg sm:text-xl font-bold text-blue-600">Panel Admina</h1>
+      <header className="bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex items-center gap-3">
+        <h1 className="text-lg sm:text-xl font-bold text-blue-600 shrink-0">Panel Admina</h1>
+
+        {/* Wyszukiwarka globalna */}
+        <div className="relative flex-1 max-w-md">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={searchQ}
+            onChange={e => { setSearchQ(e.target.value); setSearchOpen(true) }}
+            onFocus={() => setSearchOpen(true)}
+            placeholder="Szukaj: uczeń, telefon, korepetytor..."
+            className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500"
+          />
+          {searchOpen && searchQ.trim().length >= 2 && (
+            <>
+              <div className="fixed inset-0 z-30" onClick={() => setSearchOpen(false)} />
+              <div className="absolute z-40 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
+                {results.students.length === 0 && results.tutors.length === 0 ? (
+                  <p className="px-3 py-3 text-sm text-gray-400 text-center">Brak wyników</p>
+                ) : (
+                  <>
+                    {results.students.length > 0 && (
+                      <div>
+                        <p className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase">Uczniowie</p>
+                        {results.students.map(s => (
+                          <button key={s.id} onClick={() => goToStudent(s.id)}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2">
+                            <User size={14} className="text-gray-400 shrink-0" />
+                            <span className="text-sm text-gray-900">{s.name}</span>
+                            {s.phone && <span className="text-xs text-gray-400">{s.phone}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {results.tutors.length > 0 && (
+                      <div>
+                        <p className="px-3 pt-2 pb-1 text-xs font-semibold text-gray-400 uppercase">Korepetytorzy</p>
+                        {results.tutors.map(t => (
+                          <button key={t.id} onClick={goToTutor}
+                            className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-center gap-2">
+                            <GraduationCap size={14} className="text-gray-400 shrink-0" />
+                            <span className="text-sm text-gray-900">{t.name}</span>
+                            {t.phone && <span className="text-xs text-gray-400">{t.phone}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
         <button
           onClick={() => { setIsAuthenticated(false); setPassword('') }}
-          className="text-sm text-gray-500 hover:text-red-600"
+          className="text-sm text-gray-500 hover:text-red-600 shrink-0"
         >
           Wyloguj
         </button>
@@ -115,7 +192,7 @@ export default function AdminPage() {
       <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
         {activeTab === 'calendar' && <CalendarTab password={password} />}
         {activeTab === 'tutors' && <TutorsTab password={password} />}
-        {activeTab === 'students' && <StudentsTab password={password} />}
+        {activeTab === 'students' && <StudentsTab password={password} focusStudentId={focusStudentId} />}
         {activeTab === 'payments' && <PaymentsTab password={password} />}
         {activeTab === 'attendance' && <AttendanceTab password={password} />}
         {activeTab === 'review' && <AttendanceReviewTab password={password} />}

@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, X, Plus, RefreshCw, Users, User, Trash2, CalendarDays, Calendar } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, Plus, RefreshCw, Users, User, Trash2, CalendarDays, Calendar, Search } from 'lucide-react'
 import { Tutor, Student, Lesson, LessonStudent } from '@/lib/types'
+import Combobox from '@/app/components/Combobox'
 
 const ROOMS = ['Sala 1', 'Sala 2', 'Sala 3', 'Sala 4', 'Sala 5', 'Sala 6']
 const HOURS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']
@@ -44,6 +45,11 @@ export default function CalendarTab({ password }: { password: string }) {
   const [saving, setSaving] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleteScope, setDeleteScope] = useState<'this' | 'future' | 'all'>('this')
+  const [findOpen, setFindOpen] = useState(false)
+  const [findForm, setFindForm] = useState({ student_id: '', subject: '', tutor_id: 'any', duration: 60, weekdays: [] as number[], from_hour: '15:00', to_hour: '20:00' })
+  const [proposals, setProposals] = useState<{ date: string; start_time: string; end_time: string; room: string; tutor_id: string; tutor_name: string }[]>([])
+  const [finding, setFinding] = useState(false)
+  const [findSearched, setFindSearched] = useState(false)
   const [conflictModal, setConflictModal] = useState<{ kind: 'conflict' | 'warning'; messages: string[] } | null>(null)
   const [ownerPwd, setOwnerPwd] = useState('')
   const [ownerPwdError, setOwnerPwdError] = useState(false)
@@ -280,6 +286,34 @@ export default function CalendarTab({ password }: { password: string }) {
     setModal(null)
   }
 
+  const runFind = async () => {
+    setFinding(true)
+    setFindSearched(true)
+    const res = await fetch('/api/admin/find-slots', { method: 'POST', headers, body: JSON.stringify(findForm) })
+    const data = await res.json()
+    setProposals(res.ok ? (data.proposals || []) : [])
+    setFinding(false)
+  }
+
+  const openFromProposal = (p: { date: string; start_time: string; room: string; tutor_id: string }) => {
+    setCurrentDate(new Date(p.date + 'T00:00:00'))
+    setModal({ date: p.date, room: p.room, start_time: p.start_time, lesson: undefined })
+    const tutor = tutors.find(t => t.id === p.tutor_id)
+    const student = students.find(s => s.id === findForm.student_id)
+    setForm({
+      tutor_id: p.tutor_id,
+      student_id: findForm.student_id || '',
+      duration_minutes: String(findForm.duration),
+      amount_due: rateFor(student, 'individual'),
+      tutor_amount: rateFor(tutor, 'individual'),
+      is_group: false, repeat: false, repeat_weeks: '4',
+      lesson_type: '', subject: findForm.subject || '',
+      count_earnings: true,
+    })
+    setGroupEntries([{ student_id: '', amount_due: '' }])
+    setFindOpen(false)
+  }
+
   const prevDay = () => { const d = new Date(currentDate); d.setDate(d.getDate() - 1); setCurrentDate(d) }
   const nextDay = () => { const d = new Date(currentDate); d.setDate(d.getDate() + 1); setCurrentDate(d) }
   const prevWeek = () => { const d = new Date(currentDate); d.setDate(d.getDate() - 7); setCurrentDate(d) }
@@ -323,7 +357,10 @@ export default function CalendarTab({ password }: { password: string }) {
             <ChevronRight size={20} className="text-gray-700" />
           </button>
         </div>
-        <div className="hidden sm:block sm:w-[120px]" />
+        <button onClick={() => { setFindOpen(true); setProposals([]); setFindSearched(false) }}
+          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 shrink-0">
+          <Search size={15} /> Znajdź termin
+        </button>
       </div>
 
       {/* DAY VIEW */}
@@ -485,6 +522,115 @@ export default function CalendarTab({ password }: { password: string }) {
         </div>
       )}
 
+      {/* Znajdź wolny termin */}
+      {findOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[65] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200 sticky top-0 bg-white">
+              <h3 className="font-bold text-gray-900 flex items-center gap-2"><Search size={18} /> Znajdź wolny termin</h3>
+              <button onClick={() => setFindOpen(false)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+            </div>
+
+            <div className="px-5 py-4 space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Uczeń</label>
+                <Combobox value={findForm.student_id}
+                  options={students.map(s => ({ id: s.id, label: s.name, sublabel: s.phone || '' }))}
+                  onChange={id => setFindForm({ ...findForm, student_id: id })} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Przedmiot</label>
+                  <select value={findForm.subject} onChange={e => setFindForm({ ...findForm, subject: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900">
+                    <option value="">— dowolny —</option>
+                    {SUBJECTS.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Korepetytor</label>
+                  <Combobox value={findForm.tutor_id}
+                    options={[{ id: 'any', label: 'Dowolny korepetytor' }, ...tutors.map(t => ({ id: t.id, label: t.name, sublabel: t.phone || '' }))]}
+                    onChange={id => setFindForm({ ...findForm, tutor_id: id || 'any' })} />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Długość lekcji</label>
+                <div className="flex gap-2">
+                  {DURATIONS.map(d => (
+                    <button key={d} onClick={() => setFindForm({ ...findForm, duration: d })}
+                      className={`flex-1 py-2 rounded-lg text-sm font-medium border ${findForm.duration === d ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-700'}`}>
+                      {d} min
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-600 mb-1">Preferowane dni (puste = wszystkie)</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {DAY_NAMES.map((dn, idx) => {
+                    const on = findForm.weekdays.includes(idx)
+                    return (
+                      <button key={idx}
+                        onClick={() => setFindForm({ ...findForm, weekdays: on ? findForm.weekdays.filter(w => w !== idx) : [...findForm.weekdays, idx] })}
+                        className={`px-3 py-1.5 rounded-lg text-sm font-medium border ${on ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-600'}`}>
+                        {dn}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Od godziny</label>
+                  <input type="time" step={1800} value={findForm.from_hour}
+                    onChange={e => setFindForm({ ...findForm, from_hour: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Do godziny</label>
+                  <input type="time" step={1800} value={findForm.to_hour}
+                    onChange={e => setFindForm({ ...findForm, to_hour: e.target.value })}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900" />
+                </div>
+              </div>
+
+              <button onClick={runFind} disabled={finding}
+                className="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+                {finding ? 'Szukam...' : 'Szukaj wolnych terminów'}
+              </button>
+
+              {/* Wyniki */}
+              {findSearched && !finding && (
+                proposals.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-3">Brak wolnych terminów dla tych kryteriów. Poszerz zakres godzin lub dni.</p>
+                ) : (
+                  <div className="space-y-2 pt-1">
+                    <p className="text-xs font-semibold text-gray-500">Propozycje (kliknij, aby utworzyć):</p>
+                    {proposals.map((p, i) => (
+                      <button key={i} onClick={() => openFromProposal(p)}
+                        className="w-full flex items-center justify-between px-3 py-2.5 border border-gray-200 rounded-lg text-left hover:border-blue-400 hover:bg-blue-50 transition">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900 capitalize">
+                            {new Date(p.date + 'T00:00:00').toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'short' })}
+                            {' · '}{p.start_time}
+                          </p>
+                          <p className="text-xs text-gray-500">{p.room} · {p.tutor_name}</p>
+                        </div>
+                        <Plus size={16} className="text-blue-500 shrink-0" />
+                      </button>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal kolizji (twardy, hasło) lub ostrzeżenia o dostępności (miękkie) */}
       {conflictModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
@@ -593,16 +739,15 @@ export default function CalendarTab({ password }: { password: string }) {
               {/* Tutor */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Korepetytor</label>
-                <select value={form.tutor_id}
-                  onChange={e => {
-                    const t = tutors.find(x => x.id === e.target.value)
+                <Combobox
+                  value={form.tutor_id}
+                  options={tutors.map(t => ({ id: t.id, label: t.name, sublabel: t.phone || t.email || '' }))}
+                  onChange={id => {
+                    const t = tutors.find(x => x.id === id)
                     const type = !form.is_group ? 'individual' : (groupCount() === 2 ? 'pair' : 'group')
-                    setForm(f => ({ ...f, tutor_id: e.target.value, tutor_amount: f.tutor_amount || rateFor(t, type) }))
+                    setForm(f => ({ ...f, tutor_id: id, tutor_amount: f.tutor_amount || rateFor(t, type) }))
                   }}
-                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500">
-                  <option value="">— wybierz —</option>
-                  {tutors.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-                </select>
+                />
               </div>
 
               {/* Individual student */}
@@ -610,15 +755,14 @@ export default function CalendarTab({ password }: { password: string }) {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Uczeń</label>
-                    <select value={form.student_id}
-                      onChange={e => {
-                        const s = students.find(x => x.id === e.target.value)
-                        setForm(f => ({ ...f, student_id: e.target.value, amount_due: f.amount_due || rateFor(s, 'individual') }))
+                    <Combobox
+                      value={form.student_id}
+                      options={students.map(s => ({ id: s.id, label: s.name, sublabel: s.phone || '' }))}
+                      onChange={id => {
+                        const s = students.find(x => x.id === id)
+                        setForm(f => ({ ...f, student_id: id, amount_due: f.amount_due || rateFor(s, 'individual') }))
                       }}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500">
-                      <option value="">— wybierz —</option>
-                      {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
+                    />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Kwota (zł)</label>
@@ -636,18 +780,21 @@ export default function CalendarTab({ password }: { password: string }) {
                   <div className="space-y-2">
                     {groupEntries.map((entry, i) => (
                       <div key={i} className="flex gap-2">
-                        <select value={entry.student_id}
-                          onChange={e => {
-                            const ne = [...groupEntries]; ne[i].student_id = e.target.value
-                            const count = ne.filter(g => g.student_id).length
-                            const s = students.find(x => x.id === e.target.value)
-                            if (!ne[i].amount_due) ne[i].amount_due = rateFor(s, count === 2 ? 'pair' : 'group')
-                            setGroupEntries(ne)
-                          }}
-                          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-purple-500">
-                          <option value="">— uczeń —</option>
-                          {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                        </select>
+                        <div className="flex-1">
+                          <Combobox
+                            value={entry.student_id}
+                            accent="purple"
+                            placeholder="— uczeń —"
+                            options={students.map(s => ({ id: s.id, label: s.name, sublabel: s.phone || '' }))}
+                            onChange={id => {
+                              const ne = [...groupEntries]; ne[i].student_id = id
+                              const count = ne.filter(g => g.student_id).length
+                              const s = students.find(x => x.id === id)
+                              if (!ne[i].amount_due) ne[i].amount_due = rateFor(s, count === 2 ? 'pair' : 'group')
+                              setGroupEntries(ne)
+                            }}
+                          />
+                        </div>
                         <input type="number" placeholder="zł" value={entry.amount_due}
                           onChange={e => { const ne = [...groupEntries]; ne[i].amount_due = e.target.value; setGroupEntries(ne) }}
                           className="w-24 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-purple-500" />
