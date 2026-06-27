@@ -1,8 +1,9 @@
 # PROJECT STATUS — Korepetycje Calendar
-_Ostatnia aktualizacja: 2026-06-26 (wieczór)_
+_Ostatnia aktualizacja: 2026-06-27_
 
 > **Deploy:** aplikacja działa na Vercel — `kalendarz-five.vercel.app`
 > **Repo:** github.com/burzamozgowkorepetycje/Kalendarz
+> **PWA:** instalowalna na telefonie (ekran startowy = launcher: Administracja / Korepetytor)
 
 ---
 
@@ -13,9 +14,10 @@ _Ostatnia aktualizacja: 2026-06-26 (wieczór)_
 | Frontend + Backend | Next.js 16 (App Router, TypeScript) |
 | Stylowanie | Tailwind CSS |
 | Baza danych | Supabase (PostgreSQL) |
-| Email | Resend |
-| SMS | Twilio |
-| Hosting (docelowy) | Vercel |
+| Email | Resend (w trakcie weryfikacji domeny) |
+| SMS | **SMSAPI.pl** (wcześniej Twilio — porzucone) |
+| Auth korepetytora | JWT + bcrypt (cookie `tutor_token`) |
+| Hosting | Vercel |
 | Uruchamianie lokalne | `npm run dev` na porcie 3000 |
 
 ---
@@ -223,46 +225,30 @@ korepetycje-calendar/
 - [x] **Kompleksowe raporty** — osobne hasło, per korepetytor / rodzaj / przedmiot, przychód+koszt+zysk, eksport CSV, druk PDF
 - [x] **Widok tygodniowy** kalendarza (toggle Dzień/Tydzień)
 - [x] **Kredyt ucznia** — przy usuwaniu lekcji opcja odliczenia nadpłaty od przyszłego rachunku
+- [x] **SMS przez SMSAPI.pl** (migracja z Twilio) — nadawca `Test` (konto testowe), bez polskich znaków w treści (1 segment = taniej)
+- [x] **Zajęcia cykliczne powiązane `series_id`** — usuwanie: tylko ta / ta i przyszłe / cały cykl
+- [x] **Wykrywanie kolizji sal** (POST/PUT, admin i korepetytor)
+- [x] **Dowolna godzina startu** (np. 12:30) — admin i korepetytor
+- [x] **PWA** — instalowalna na telefonie, launcher na stronie głównej
+- [x] **Responsywność mobilna** + naprawa niewidocznego tekstu w trybie ciemnym telefonu
+- [x] **Historia zmian (audit log)** — zakładka Historia: kto/co/kiedy (dodanie/edycja/usunięcie zajęć)
+- [x] **Naprawiony błąd:** POST lekcji gubił `lesson_type`/`subject`/`tutor_amount`/`is_group`
 
 ---
 
 ## 8. CO ZOSTAŁO DO ZROBIENIA ❌
 
-### Wysoki priorytet
-- [ ] **Weryfikacja domeny w Resend** — aktualnie emaile mogą trafić do spamu (brak własnej domeny)
-- [ ] **Weryfikacja numeru Twilio** — trial pozwala wysyłać SMS tylko na zweryfikowane numery
+### Zewnętrzne (czekają na właściciela)
+- [ ] **Weryfikacja domeny Resend** — DKIM ✅ i SPF ✅ opublikowane; brakuje rekordu **MX** na `send` (`feedback-smtp.eu-west-1.amazonses.com.` z kropką, prio 10) w nazwa.pl. Po dodaniu → „Verify". W toku.
+- [ ] **SMSAPI produkcyjnie** — wyjść z konta testowego (doładowanie) + zarejestrować nazwę nadawcy `BurzaMozgow`, zmienić `SMSAPI_SENDER`. W toku.
 
-### Średni priorytet
-- [ ] **Powiadomienie przy zmianie/odwołaniu zajęć** — aktualnie tylko przy rezerwacji
-- [ ] **Historia zmian zajęć** — audit log (kto co zmienił)
-- [ ] **Możliwość anulowania pojedynczych zajęć z cyklu** bez usuwania całego cyklu
+### Świadomie odpuszczone
+- [x] ~~Powiadomienie przy odwołaniu zajęć~~ — decyzja: obsługuje sekretariat ręcznie
+- [x] ~~Widok mobilny (agenda)~~ — obecny kalendarz wygodny na telefonie wg właściciela
 
-### Niski priorytet
-- [ ] **Logowanie korepetytorów** — aktualnie dostają tylko link, nie mają konta
-- [ ] **Panel korepetytora** — podgląd własnych zajęć i historii
-- [ ] **Synchronizacja z Google Calendar** — opcjonalny eksport do GCal
-- [ ] **Aplikacja mobilna** — aktualnie tylko przeglądarka
-
----
-
-## 9. NASTĘPNE KROKI (sugerowana kolejność)
-
-1. **Deploy na Vercel** (15 min)
-   - `git init && git add . && git commit -m "init"`
-   - Push na GitHub
-   - Import na vercel.com
-   - Dodać zmienne środowiskowe z `.env.local`
-
-2. **Weryfikacja domeny Resend** (10 min)
-   - Dodać domenę na resend.com
-   - Dodać rekordy DNS
-   - Zmienić `RESEND_FROM_EMAIL` w `.env.local`
-
-3. **Odblokowanie SMS Twilio** (5 min)
-   - W Twilio trial → zweryfikować numery odbiorców
-   - Lub upgrade konta dla produkcji
-
-4. **Widok tygodniowy** — opcjonalnie po deployu
+### Niski priorytet / kiedyś
+- [ ] **Osobne loginy** admin vs sekretarka (teraz wspólne hasło → w historii oboje jako „Administracja")
+- [ ] **Synchronizacja z Google Calendar**
 
 ---
 
@@ -273,10 +259,9 @@ NEXT_PUBLIC_SUPABASE_URL=https://rdrefgfzrifghetxrymw.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 RESEND_API_KEY=re_...
-RESEND_FROM_EMAIL=noreply@korepetycje.pl
-TWILIO_ACCOUNT_SID=AC...
-TWILIO_AUTH_TOKEN=...
-TWILIO_PHONE_NUMBER=+16093228635
+RESEND_FROM_EMAIL=noreply@burza-mozgow-korepetycje.pl
+SMSAPI_TOKEN=...                         # token OAuth z panelu SMSAPI
+SMSAPI_SENDER=Test                       # nazwa nadawcy (docelowo: BurzaMozgow)
 ADMIN_PASSWORD=admin123
 NEXT_PUBLIC_ADMIN_PASSWORD=admin123
 NEXT_PUBLIC_REPORTS_PASSWORD=admin1234   # osobne hasło do zakładki Raporty
@@ -285,6 +270,7 @@ JWT_SECRET=...                           # sesje korepetytorów (panel /tutor)
 ```
 
 > Te same zmienne muszą być dodane w **Vercel → Settings → Environment Variables**.
+> Zmienne `TWILIO_*` są **już nieużywane** (migracja na SMSAPI) — można usunąć.
 
 ### Migracje SQL wykonane w Supabase
 ```sql
@@ -292,7 +278,20 @@ ALTER TABLE tutors   ADD COLUMN IF NOT EXISTS login TEXT UNIQUE;
 ALTER TABLE tutors   ADD COLUMN IF NOT EXISTS password_hash TEXT;
 ALTER TABLE lessons  ADD COLUMN IF NOT EXISTS lesson_type TEXT;
 ALTER TABLE lessons  ADD COLUMN IF NOT EXISTS subject TEXT;
+ALTER TABLE lessons  ADD COLUMN IF NOT EXISTS series_id UUID;
+CREATE INDEX  IF NOT EXISTS idx_lessons_series ON lessons(series_id);
 ALTER TABLE students ADD COLUMN IF NOT EXISTS credit_balance NUMERIC DEFAULT 0;
+
+-- Historia zmian (audit log)
+CREATE TABLE IF NOT EXISTS audit_log (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  actor_type TEXT NOT NULL,
+  actor_name TEXT NOT NULL,
+  action TEXT NOT NULL,
+  summary TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_log(created_at DESC);
 ```
 
 ---
