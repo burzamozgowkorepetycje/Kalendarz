@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { logAudit, describeLesson } from '@/lib/audit'
 import { findLessonConflicts } from '@/lib/conflicts'
+import { availabilityWarnings } from '@/lib/availability'
 
 function verifyAdmin(req: NextRequest) {
   return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
@@ -65,6 +66,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Miękkie ostrzeżenie o dostępności (można pominąć przez ack_warnings lub wymuszenie)
+  if (body.force !== true && body.ack_warnings !== true) {
+    const warnings = await availabilityWarnings({ tutor_id: body.tutor_id || null, date, start_time, end_time })
+    if (warnings.length > 0) {
+      return NextResponse.json({ warning: true, warnings }, { status: 409 })
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .from('lessons')
     .insert({
@@ -98,7 +107,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, force, owner_password, student_ids, ...fields } = await req.json()
+  const { id, force, owner_password, student_ids, ack_warnings, ...fields } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   // Walidacja kolizji przy zmianie terminu (jeśli przekazano date/room/godziny)
@@ -116,6 +125,14 @@ export async function PUT(req: NextRequest) {
         }
       } else {
         return NextResponse.json({ error: 'Wykryto kolizję', conflicts, canForce: true }, { status: 409 })
+      }
+    }
+
+    // Miękkie ostrzeżenie o dostępności
+    if (force !== true && ack_warnings !== true) {
+      const warnings = await availabilityWarnings({ tutor_id: fields.tutor_id || null, date: fields.date, start_time: fields.start_time, end_time: fields.end_time })
+      if (warnings.length > 0) {
+        return NextResponse.json({ warning: true, warnings }, { status: 409 })
       }
     }
   }

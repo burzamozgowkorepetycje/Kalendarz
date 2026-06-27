@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, X, Plus, LogOut, User, Users } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, Plus, LogOut, User, Users, CalendarClock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import AvailabilityEditor, { Slot } from '@/app/components/AvailabilityEditor'
 
 interface Student { id: string; name: string }
 interface CalendarLesson {
@@ -43,6 +44,7 @@ export default function TutorDashboard() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [loadingCal, setLoadingCal] = useState(false)
+  const [showAvailability, setShowAvailability] = useState(false)
 
   const dateStr = toDateStr(currentDate)
 
@@ -130,10 +132,33 @@ export default function TutorDashboard() {
       {/* Header */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <h1 className="text-base font-bold text-gray-900">Panel korepetytora</h1>
-        <button onClick={handleLogout} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
-          <LogOut size={16} /> Wyloguj
-        </button>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowAvailability(true)} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
+            <CalendarClock size={16} /> Dostępność
+          </button>
+          <button onClick={handleLogout} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
+            <LogOut size={16} /> Wyloguj
+          </button>
+        </div>
       </div>
+
+      {showAvailability && (
+        <AvailabilityEditor
+          title="Moja dostępność (grafik tygodniowy)"
+          load={async () => {
+            const r = await fetch('/api/tutor/availability')
+            return r.ok ? (await r.json()) as Slot[] : []
+          }}
+          save={async (slots) => {
+            const r = await fetch('/api/tutor/availability', {
+              method: 'PUT', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ slots }),
+            })
+            return { ok: r.ok, error: r.ok ? undefined : 'Błąd zapisu' }
+          }}
+          onClose={() => setShowAvailability(false)}
+        />
+      )}
 
       {/* Date nav */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">

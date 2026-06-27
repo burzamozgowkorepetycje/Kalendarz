@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Copy, KeyRound, X } from 'lucide-react'
+import { Plus, Trash2, Copy, KeyRound, X, CalendarClock } from 'lucide-react'
 import { Tutor } from '@/lib/types'
+import AvailabilityEditor, { Slot } from '@/app/components/AvailabilityEditor'
 
 interface PasswordModal {
   tutorId: string
@@ -14,6 +15,7 @@ export default function TutorsTab({ password }: { password: string }) {
   const [form, setForm] = useState({ name: '', email: '', phone: '' })
   const [loading, setLoading] = useState(false)
   const [passwordModal, setPasswordModal] = useState<PasswordModal | null>(null)
+  const [availTutor, setAvailTutor] = useState<{ id: string; name: string } | null>(null)
   const [pwForm, setPwForm] = useState({ login: '', password: '', password2: '' })
   const [pwLoading, setPwLoading] = useState(false)
   const [pwError, setPwError] = useState('')
@@ -125,6 +127,10 @@ export default function TutorsTab({ password }: { password: string }) {
                   <p className="text-sm text-gray-600">{tutor.email} · {tutor.phone || 'brak telefonu'}</p>
                 </div>
                 <div className="flex gap-2">
+                  <button onClick={() => setAvailTutor({ id: tutor.id, name: tutor.name })}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100">
+                    <CalendarClock size={14} /> Grafik
+                  </button>
                   <button onClick={() => openPasswordModal(tutor)}
                     className="flex items-center gap-1 px-3 py-1.5 bg-green-50 text-green-700 rounded-lg text-sm hover:bg-green-100">
                     <KeyRound size={14} /> Hasło
@@ -143,6 +149,25 @@ export default function TutorsTab({ password }: { password: string }) {
           </div>
         )}
       </div>
+
+      {/* Availability editor */}
+      {availTutor && (
+        <AvailabilityEditor
+          title={`Grafik: ${availTutor.name}`}
+          load={async () => {
+            const r = await fetch(`/api/admin/tutor-availability?tutor_id=${availTutor.id}`, { headers })
+            return r.ok ? ((await r.json()) as Slot[]) : []
+          }}
+          save={async (slots) => {
+            const r = await fetch('/api/admin/tutor-availability', {
+              method: 'PUT', headers,
+              body: JSON.stringify({ tutor_id: availTutor.id, slots }),
+            })
+            return { ok: r.ok, error: r.ok ? undefined : 'Błąd zapisu' }
+          }}
+          onClose={() => setAvailTutor(null)}
+        />
+      )}
 
       {/* Password modal */}
       {passwordModal && (
