@@ -323,7 +323,7 @@ export default function CalendarTab({ password }: { password: string }) {
   const runFind = async () => {
     setFinding(true)
     setFindSearched(true)
-    const res = await fetch('/api/admin/find-slots', { method: 'POST', headers, body: JSON.stringify(findForm) })
+    const res = await fetch('/api/admin/find-slots', { method: 'POST', headers, body: JSON.stringify({ ...findForm, mode: location === 'Online' ? 'online' : 'onsite' }) })
     const data = await res.json()
     setProposals(res.ok ? (data.proposals || []) : [])
     setFinding(false)
@@ -331,6 +331,8 @@ export default function CalendarTab({ password }: { password: string }) {
 
   const openFromProposal = (p: { date: string; start_time: string; room: string; tutor_id: string }) => {
     setCurrentDate(new Date(p.date + 'T00:00:00'))
+    setFindOpen(false)
+    if (location === 'Online') { openOnlineModal(undefined, { tutor_id: p.tutor_id, start_time: p.start_time }); return }
     setModal({ date: p.date, room: p.room, start_time: p.start_time, lesson: undefined })
     const tutor = tutors.find(t => t.id === p.tutor_id)
     const student = students.find(s => s.id === findForm.student_id)
@@ -411,17 +413,18 @@ export default function CalendarTab({ password }: { password: string }) {
             <ChevronRight size={20} className="text-gray-700" />
           </button>
         </div>
-        {location === 'Online' ? (
-          <button onClick={() => openOnlineModal()}
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 shrink-0">
-            <Plus size={15} /> Dodaj zajęcia online
-          </button>
-        ) : (
+        <div className="flex gap-2 shrink-0">
           <button onClick={() => { setFindOpen(true); setProposals([]); setFindSearched(false) }}
-            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 shrink-0">
+            className="flex items-center gap-1.5 px-3 py-2 border border-blue-600 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-50">
             <Search size={15} /> Znajdź termin
           </button>
-        )}
+          {location === 'Online' && (
+            <button onClick={() => openOnlineModal()}
+              className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700">
+              <Plus size={15} /> Dodaj
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ONLINE VIEW — siatka: korepetytorzy online jako kolumny */}

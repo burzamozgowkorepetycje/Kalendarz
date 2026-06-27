@@ -43,10 +43,11 @@ export async function POST(req: NextRequest) {
 
   // Korepetytorzy + ich dostępność tygodniowa
   const subject: string | null = body.subject || null
-  const { data: tutorsData } = await supabaseAdmin.from('tutors').select('id, name, active, subjects, works_onsite')
+  const mode: 'online' | 'onsite' = body.mode === 'online' ? 'online' : 'onsite'
+  const { data: tutorsData } = await supabaseAdmin.from('tutors').select('id, name, active, subjects, works_onsite, works_online, meet_link')
   const tutors = (tutorsData ?? []).filter(t => {
     if (t.active === false) return false
-    if (t.works_onsite === false) return false // znajdź termin = stacjonarnie
+    if (mode === 'online' ? (t.works_online === false || !t.meet_link) : t.works_onsite === false) return false
     if (subject && Array.isArray(t.subjects) && t.subjects.length > 0 && !t.subjects.includes(subject)) return false
     return true
   })
@@ -95,14 +96,21 @@ export async function POST(req: NextRequest) {
     for (let s = fromMin; s + duration <= toMax && proposals.length < MAX; s += 30) {
       if ((perDay[date] || 0) >= PER_DAY) break
       const e = s + duration
-      for (const room of ROOMS) {
-        if (!roomFree(room, date, s, e)) continue
-        if (!studentFree(date, s, e)) continue
+      if (!studentFree(date, s, e)) continue
+      if (mode === 'online') {
         const t = candidateTutors.find(t => tutorFree(t.id as string, date, s, e) && tutorAvailable(t.id as string, date, s, e))
         if (!t) continue
-        proposals.push({ date, start_time: hhmm(s), end_time: hhmm(e), room, tutor_id: t.id as string, tutor_name: t.name as string })
+        proposals.push({ date, start_time: hhmm(s), end_time: hhmm(e), room: 'Online', tutor_id: t.id as string, tutor_name: t.name as string })
         perDay[date] = (perDay[date] || 0) + 1
-        break // następna godzina
+      } else {
+        for (const room of ROOMS) {
+          if (!roomFree(room, date, s, e)) continue
+          const t = candidateTutors.find(t => tutorFree(t.id as string, date, s, e) && tutorAvailable(t.id as string, date, s, e))
+          if (!t) continue
+          proposals.push({ date, start_time: hhmm(s), end_time: hhmm(e), room, tutor_id: t.id as string, tutor_name: t.name as string })
+          perDay[date] = (perDay[date] || 0) + 1
+          break
+        }
       }
     }
   }
