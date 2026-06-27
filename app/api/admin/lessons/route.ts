@@ -1,33 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { logAudit, describeLesson } from '@/lib/audit'
+import { findLessonConflicts } from '@/lib/conflicts'
 
 function verifyAdmin(req: NextRequest) {
   return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
 }
 
-function toMin(t: string | null): number {
-  if (!t) return 0
-  const [h, m] = String(t).split(':').map(Number)
-  return h * 60 + (m || 0)
-}
-
-/**
- * Sprawdza czy w danej sali i dniu nowy przedział [start,end) nachodzi na istniejące zajęcia.
- * excludeId — pomija lekcję o tym id (przy edycji).
- */
-async function hasRoomConflict(date: string, room: string, start: string, end: string, excludeId?: string): Promise<boolean> {
-  const newStart = toMin(start)
-  const newEnd = toMin(end)
-  let q = supabaseAdmin
-    .from('lessons')
-    .select('id, start_time, end_time')
-    .eq('date', date)
-    .eq('room', room)
-  if (excludeId) q = q.neq('id', excludeId)
-  const { data } = await q
-  return (data ?? []).some(l => toMin(l.start_time) < newEnd && toMin(l.end_time) > newStart)
-}
+// Hasło właściciela do wymuszenia mimo kolizji (sekretariat go nie zna).
+// Domyślnie = hasło raportów; można nadpisać OWNER_PASSWORD w env.
+const OWNER_PASSWORD = process.env.OWNER_PASSWORD || 'admin1234'
 
 export async function GET(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -65,11 +47,22 @@ export async function POST(req: NextRequest) {
   }
 
   const room = body.room || 'Sala 1'
-  if (await hasRoomConflict(date, room, start_time, end_time)) {
-    return NextResponse.json(
-      { error: `${room} jest już zajęta w tym czasie (${date}). Wybierz inną godzinę lub salę.` },
-      { status: 409 }
-    )
+
+  // Wykrywanie kolizji: sala + korepetytor + uczeń/grupa
+  const conflicts = await findLessonConflicts({
+    date, start_time, end_time, room,
+    tutor_id: body.tutor_id || null,
+    studentIds: Array.isArray(body.student_ids) ? body.student_ids : (body.student_id ? [body.student_id] : []),
+  })
+  if (conflicts.length > 0) {
+    if (body.force === true) {
+      // Wymuszenie tylko za poprawnym hasłem właściciela
+      if (body.owner_password !== OWNER_PASSWORD) {
+        return NextResponse.json({ error: 'Nieprawidłowe hasło właściciela', conflicts }, { status: 403 })
+      }
+    } else {
+      return NextResponse.json({ error: 'Wykryto kolizję', conflicts, canForce: true }, { status: 409 })
+    }
   }
 
   const { data, error } = await supabaseAdmin
@@ -105,16 +98,25 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, ...fields } = await req.json()
+  const { id, force, owner_password, student_ids, ...fields } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   // Walidacja kolizji przy zmianie terminu (jeśli przekazano date/room/godziny)
   if (fields.date && fields.room && fields.start_time && fields.end_time) {
-    if (await hasRoomConflict(fields.date, fields.room, fields.start_time, fields.end_time, id)) {
-      return NextResponse.json(
-        { error: `${fields.room} jest już zajęta w tym czasie (${fields.date}). Wybierz inną godzinę lub salę.` },
-        { status: 409 }
-      )
+    const conflicts = await findLessonConflicts({
+      date: fields.date, start_time: fields.start_time, end_time: fields.end_time,
+      room: fields.room, tutor_id: fields.tutor_id || null,
+      studentIds: Array.isArray(student_ids) ? student_ids : (fields.student_id ? [fields.student_id] : []),
+      excludeId: id,
+    })
+    if (conflicts.length > 0) {
+      if (force === true) {
+        if (owner_password !== OWNER_PASSWORD) {
+          return NextResponse.json({ error: 'Nieprawidłowe hasło właściciela', conflicts }, { status: 403 })
+        }
+      } else {
+        return NextResponse.json({ error: 'Wykryto kolizję', conflicts, canForce: true }, { status: 409 })
+      }
     }
   }
 

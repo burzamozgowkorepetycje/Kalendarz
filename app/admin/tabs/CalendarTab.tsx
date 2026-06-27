@@ -43,6 +43,9 @@ export default function CalendarTab({ password }: { password: string }) {
   const [saving, setSaving] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState(false)
   const [deleteScope, setDeleteScope] = useState<'this' | 'future' | 'all'>('this')
+  const [conflictModal, setConflictModal] = useState<string[] | null>(null)
+  const [ownerPwd, setOwnerPwd] = useState('')
+  const [ownerPwdError, setOwnerPwdError] = useState(false)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
   const dateStr = toDateStr(currentDate)
@@ -120,7 +123,12 @@ export default function CalendarTab({ password }: { password: string }) {
     return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
   }
 
-  const createLesson = async (date: string, series_id?: string | null) => {
+  const studentIds = () =>
+    form.is_group
+      ? groupEntries.filter(e => e.student_id).map(e => e.student_id)
+      : (form.student_id ? [form.student_id] : [])
+
+  const createLesson = async (date: string, series_id?: string | null, force?: boolean, owner_password?: string) => {
     if (!modal) return
     const endTime = calcEndTime(modal.start_time, Number(form.duration_minutes))
     const body = {
@@ -128,6 +136,7 @@ export default function CalendarTab({ password }: { password: string }) {
       duration_minutes: Number(form.duration_minutes),
       tutor_id: form.tutor_id || null,
       student_id: form.is_group ? null : (form.student_id || null),
+      student_ids: studentIds(),
       amount_due: form.is_group ? null : (form.amount_due ? Number(form.amount_due) : null),
       tutor_amount: form.tutor_amount ? Number(form.tutor_amount) : null,
       room: modal.room, is_group: form.is_group,
@@ -135,10 +144,12 @@ export default function CalendarTab({ password }: { password: string }) {
       lesson_type: form.lesson_type || null,
       subject: form.subject || null,
       series_id: series_id || null,
+      force: force || false,
+      owner_password: owner_password || undefined,
     }
     const res = await fetch('/api/admin/lessons', { method: 'POST', headers, body: JSON.stringify(body) })
     const lesson = await res.json()
-    if (!res.ok) return { ok: false, error: lesson.error as string }
+    if (!res.ok) return { ok: false as const, error: lesson.error as string, conflicts: lesson.conflicts as string[] | undefined, status: res.status }
     if (form.is_group && lesson.id) {
       for (const entry of groupEntries.filter(e => e.student_id)) {
         await fetch('/api/admin/lesson-students', {
@@ -150,7 +161,7 @@ export default function CalendarTab({ password }: { password: string }) {
     return { ok: true as const }
   }
 
-  const handleSave = async () => {
+  const handleSave = async (force?: boolean, owner_password?: string) => {
     if (!modal) return
     setSaving(true)
     if (modal.lesson) {
@@ -164,18 +175,26 @@ export default function CalendarTab({ password }: { password: string }) {
           start_time: modal.start_time,
           tutor_id: form.tutor_id || null,
           student_id: form.is_group ? null : (form.student_id || null),
+          student_ids: studentIds(),
           amount_due: form.is_group ? null : (form.amount_due ? Number(form.amount_due) : null),
           tutor_amount: form.tutor_amount ? Number(form.tutor_amount) : null,
           duration_minutes: Number(form.duration_minutes),
           end_time: endTime, is_group: form.is_group,
           lesson_type: form.lesson_type || null,
           subject: form.subject || null,
+          force: force || false,
+          owner_password: owner_password || undefined,
         }),
       })
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        alert(data.error || 'Nie udało się zapisać zmian')
         setSaving(false)
+        if (res.status === 403) { setOwnerPwdError(true); return } // złe hasło właściciela — modal kolizji zostaje
+        if (res.status === 409 && data.conflicts) {
+          setConflictModal(data.conflicts)
+          return
+        }
+        alert(data.error || 'Nie udało się zapisać zmian')
         return
       }
       if (form.is_group) {
@@ -197,25 +216,33 @@ export default function CalendarTab({ password }: { password: string }) {
         const d = new Date(modal.date)
         d.setDate(d.getDate() + i * 7)
         const ds = toDateStr(d)
-        const r = await createLesson(ds, seriesId)
+        const r = await createLesson(ds, seriesId, force, owner_password)
         if (r && !r.ok) skipped.push(ds)
       }
       if (skipped.length > 0) {
         await loadLessons()
-        alert(`Część terminów pominięto (sala zajęta): ${skipped.join(', ')}. Pozostałe zostały dodane.`)
+        alert(`Część terminów pominięto (kolizja): ${skipped.join(', ')}. Pozostałe zostały dodane.`)
         setSaving(false)
         return
       }
     } else {
-      const r = await createLesson(modal.date)
+      const r = await createLesson(modal.date, null, force, owner_password)
       if (r && !r.ok) {
-        alert(r.error || 'Nie udało się dodać zajęć')
         setSaving(false)
+        if (r.status === 403) { setOwnerPwdError(true); return } // złe hasło właściciela
+        if (r.conflicts) {
+          setConflictModal(r.conflicts)
+          return
+        }
+        alert(r.error || 'Nie udało się dodać zajęć')
         return
       }
     }
     await loadLessons()
     setModal(null)
+    setConflictModal(null)
+    setOwnerPwd('')
+    setOwnerPwdError(false)
     setSaving(false)
   }
 
@@ -434,6 +461,42 @@ export default function CalendarTab({ password }: { password: string }) {
         </div>
       )}
 
+      {/* Ostrzeżenie o kolizji — z opcją wymuszenia za hasłem właściciela */}
+      {conflictModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="font-bold text-gray-900 text-lg mb-1">⚠️ Wykryto kolizję</h3>
+            <p className="text-sm text-gray-600 mb-3">Te zajęcia nakładają się z:</p>
+            <ul className="space-y-1.5 mb-4">
+              {conflictModal.map((c, i) => (
+                <li key={i} className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2">{c}</li>
+              ))}
+            </ul>
+            <div className="border-t border-gray-200 pt-4">
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                Wymuszenie mimo kolizji — wymaga hasła właściciela
+              </label>
+              <input type="password" value={ownerPwd}
+                onChange={e => { setOwnerPwd(e.target.value); setOwnerPwdError(false) }}
+                placeholder="Hasło właściciela"
+                className={`w-full border rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-amber-500 ${ownerPwdError ? 'border-red-400 bg-red-50' : 'border-gray-300'}`} />
+              {ownerPwdError && <p className="text-xs text-red-600 mt-1">Nieprawidłowe hasło właściciela</p>}
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button onClick={() => { setConflictModal(null); setOwnerPwd(''); setOwnerPwdError(false) }}
+                className="flex-1 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">
+                Anuluj
+              </button>
+              <button onClick={() => { if (!ownerPwd) { setOwnerPwdError(true); return } handleSave(true, ownerPwd) }}
+                disabled={saving}
+                className="flex-1 py-2 text-sm font-semibold bg-amber-600 text-white rounded-lg hover:bg-amber-700 disabled:opacity-50">
+                {saving ? 'Zapisywanie...' : 'Wymuś mimo ostrzeżenia'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Modal — identyczny dla obu widoków */}
       {modal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -611,7 +674,7 @@ export default function CalendarTab({ password }: { password: string }) {
               )}
               <div className="flex-1" />
               <button onClick={() => setModal(null)} className="px-4 py-2 text-sm font-medium text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50">Anuluj</button>
-              <button onClick={handleSave} disabled={saving}
+              <button onClick={() => handleSave()} disabled={saving}
                 className="px-6 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50">
                 {saving ? 'Zapisywanie...' : form.repeat ? `Zapisz (${form.repeat_weeks === '52' ? 'do odwołania' : form.repeat_weeks + ' tyg.'})` : 'Zapisz'}
               </button>

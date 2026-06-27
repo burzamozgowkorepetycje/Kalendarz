@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { verifyTutorToken } from '@/app/api/tutor/auth/route'
 import { logAudit, describeLesson } from '@/lib/audit'
+import { findLessonConflicts } from '@/lib/conflicts'
 
 export async function GET(req: NextRequest) {
   const tutor = verifyTutorToken(req)
@@ -44,18 +45,14 @@ export async function POST(req: NextRequest) {
     const endM = totalMinutes % 60
     const end_time = `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`
 
-    // Walidacja kolizji — sala zajęta w tym czasie?
-    const newStart = h * 60 + m
-    const newEnd = totalMinutes
-    const { data: sameRoom } = await supabaseAdmin
-      .from('lessons')
-      .select('start_time, end_time')
-      .eq('date', date)
-      .eq('room', room)
-    const toMin = (t: string) => { const [hh, mm] = String(t).split(':').map(Number); return hh * 60 + (mm || 0) }
-    const conflict = (sameRoom ?? []).some(l => toMin(l.start_time) < newEnd && toMin(l.end_time) > newStart)
-    if (conflict) {
-      return NextResponse.json({ error: `${room} jest juz zajeta w tym czasie. Wybierz inna godzine lub sale.` }, { status: 409 })
+    // Walidacja kolizji: sala + korepetytor + uczeń (twarda blokada — korepetytor nie wymusza)
+    const conflicts = await findLessonConflicts({
+      date, start_time, end_time, room,
+      tutor_id: tutor.tutorId,
+      studentIds: [student_id],
+    })
+    if (conflicts.length > 0) {
+      return NextResponse.json({ error: conflicts.join(' · '), conflicts }, { status: 409 })
     }
 
     const { data, error } = await supabaseAdmin
