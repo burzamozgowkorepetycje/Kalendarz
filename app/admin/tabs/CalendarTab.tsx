@@ -31,6 +31,7 @@ export default function CalendarTab({ password }: { password: string }) {
   const [view, setView] = useState<'day' | 'week'>('day')
   const [location, setLocation] = useState<'Wyszków' | 'Online'>('Wyszków')
   const [sendingMeet, setSendingMeet] = useState<string | null>(null)
+  const [availAll, setAvailAll] = useState<{ tutor_id: string; weekday: number; start_time: string; end_time: string }[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [tutors, setTutors] = useState<Tutor[]>([])
@@ -70,6 +71,7 @@ export default function CalendarTab({ password }: { password: string }) {
   useEffect(() => {
     fetch('/api/admin/tutors', { headers }).then(r => r.json()).then(setTutors)
     fetch('/api/admin/students', { headers }).then(r => r.json()).then(setStudents)
+    fetch('/api/admin/tutor-availability', { headers }).then(r => r.json()).then(d => setAvailAll(Array.isArray(d) ? d : []))
   }, [])
 
   useEffect(() => { loadLessons() }, [dateStr, view, location])
@@ -135,10 +137,26 @@ export default function CalendarTab({ password }: { password: string }) {
     await loadModalForm(existing)
   }
 
-  const openOnlineModal = async (existing?: Lesson) => {
-    setModal({ date: dateStr, room: 'Online', start_time: existing ? String(existing.start_time).substring(0, 5) : '15:00', lesson: existing })
+  const openOnlineModal = async (existing?: Lesson, prefill?: { tutor_id?: string; start_time?: string }) => {
+    setModal({ date: dateStr, room: 'Online', start_time: existing ? String(existing.start_time).substring(0, 5) : (prefill?.start_time || '15:00'), lesson: existing })
     await loadModalForm(existing)
+    if (!existing && prefill?.tutor_id) {
+      const t = tutors.find(x => x.id === prefill.tutor_id)
+      setForm(f => ({ ...f, tutor_id: prefill.tutor_id!, tutor_amount: f.tutor_amount || rateFor(t, 'individual') }))
+    }
   }
+
+  // dostępność korepetytora online w danej godzinie (dla siatki online)
+  const onlineTutors = tutors.filter(t => t.meet_link)
+  const tutorAvailableAt = (tutorId: string, hour: string) => {
+    const rows = availAll.filter(a => a.tutor_id === tutorId)
+    if (rows.length === 0) return true
+    const wd = (new Date(dateStr + 'T00:00:00').getDay() + 6) % 7
+    const hMin = parseInt(hour.substring(0, 2)) * 60
+    return rows.some(r => r.weekday === wd && parseInt(String(r.start_time).substring(0, 2)) * 60 <= hMin && parseInt(String(r.end_time).substring(0, 2)) * 60 > hMin)
+  }
+  const onlineLessonAt = (tutorId: string, hour: string) =>
+    lessons.find(l => l.tutor_id === tutorId && String(l.start_time).substring(0, 2) === hour.substring(0, 2))
 
   const calcEndTime = (start: string, minutes: number) => {
     const [h, m] = start.split(':').map(Number)
@@ -406,41 +424,64 @@ export default function CalendarTab({ password }: { password: string }) {
         )}
       </div>
 
-      {/* ONLINE VIEW — agenda z linkami Meet */}
+      {/* ONLINE VIEW — siatka: korepetytorzy online jako kolumny */}
       {location === 'Online' && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-            <Video size={16} className="text-blue-600" />
-            <span className="text-sm font-semibold text-gray-700">Zajęcia online — {dayLabel}</span>
+        onlineTutors.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 px-4 py-10 text-center text-gray-400 text-sm">
+            Brak korepetytorów online. Ustaw <span className="font-medium">link Google Meet</span> przy korepetytorze (zakładka Korepetytorzy → „Stawki"), aby pojawił się tutaj jako kolumna.
           </div>
-          {lessons.length === 0 ? (
-            <p className="px-4 py-10 text-center text-gray-400 text-sm">Brak zajęć online tego dnia. Kliknij „Dodaj zajęcia online".</p>
-          ) : (
-            <div className="divide-y divide-gray-100">
-              {[...lessons].sort((a, b) => String(a.start_time).localeCompare(String(b.start_time))).map(lesson => (
-                <div key={lesson.id} className="px-4 py-3 flex items-center justify-between gap-3">
-                  <button onClick={() => openOnlineModal(lesson)} className="text-left min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      {lesson.is_group ? <Users size={13} className="text-purple-500 shrink-0" /> : <User size={13} className="text-gray-400 shrink-0" />}
-                      <span className="text-sm font-medium text-gray-900 truncate">
-                        {tutors.find(t => t.id === lesson.tutor_id)?.name || '—'}
-                        {!lesson.is_group && ` → ${students.find(s => s.id === lesson.student_id)?.name || '—'}`}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {String(lesson.start_time).substring(0, 5)}–{String(lesson.end_time).substring(0, 5)} · {lesson.duration_minutes} min
-                      {lesson.subject ? ` · ${lesson.subject}` : ''}{lesson.is_group ? ' · Grupa' : ''}
-                    </p>
-                  </button>
-                  <button onClick={() => sendMeet(lesson.id)} disabled={sendingMeet === lesson.id}
-                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100 disabled:opacity-50">
-                    <Send size={13} /> {sendingMeet === lesson.id ? 'Wysyłam...' : 'Wyślij link Meet'}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+            <table className="w-full border-collapse" style={{ minWidth: `${80 + onlineTutors.length * 130}px` }}>
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="w-16 px-3 py-3 text-left text-xs font-semibold text-gray-500">Godz.</th>
+                  {onlineTutors.map(t => (
+                    <th key={t.id} className="px-2 py-3 text-center text-xs font-semibold text-gray-700">
+                      <div className="flex items-center justify-center gap-1"><Video size={11} className="text-blue-500" /> {t.name}</div>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {HOURS.map(hour => (
+                  <tr key={hour} className="border-b border-gray-100">
+                    <td className="px-3 py-1.5 text-xs font-medium text-gray-500 whitespace-nowrap">{hour}</td>
+                    {onlineTutors.map(t => {
+                      const lesson = onlineLessonAt(t.id, hour)
+                      const avail = tutorAvailableAt(t.id, hour)
+                      return (
+                        <td key={t.id} className={`px-1 py-1 ${!lesson && !avail ? 'bg-gray-50' : ''}`}>
+                          {lesson ? (
+                            <div className={`rounded-lg px-2 py-1.5 text-xs border ${lesson.is_group ? 'bg-purple-100 border-purple-300' : 'bg-blue-100 border-blue-300'}`}>
+                              <button onClick={() => openOnlineModal(lesson)} className="text-left w-full">
+                                <p className="font-semibold text-gray-900 truncate">
+                                  {lesson.is_group ? 'Grupa' : (students.find(s => s.id === lesson.student_id)?.name || '—')}
+                                </p>
+                                <p className="text-gray-600">{String(lesson.start_time).substring(0, 5)} · {lesson.duration_minutes}m</p>
+                              </button>
+                              <button onClick={() => sendMeet(lesson.id)} disabled={sendingMeet === lesson.id}
+                                className="mt-1 w-full flex items-center justify-center gap-1 bg-white/70 rounded text-[11px] text-blue-700 py-0.5 hover:bg-white">
+                                <Send size={10} /> {sendingMeet === lesson.id ? '...' : 'Wyślij link'}
+                              </button>
+                            </div>
+                          ) : avail ? (
+                            <button onClick={() => openOnlineModal(undefined, { tutor_id: t.id, start_time: hour })}
+                              className="w-full h-12 rounded-lg border-2 border-dashed border-gray-200 hover:border-blue-400 hover:bg-blue-50 flex items-center justify-center group">
+                              <Plus size={14} className="text-gray-300 group-hover:text-blue-500" />
+                            </button>
+                          ) : (
+                            <div className="w-full h-12 rounded-lg flex items-center justify-center text-[10px] text-gray-300">niedost.</div>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
       )}
 
       {/* DAY VIEW */}

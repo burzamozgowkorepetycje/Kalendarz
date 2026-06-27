@@ -11,13 +11,15 @@ export async function GET(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const tutorId = new URL(req.url).searchParams.get('tutor_id')
-  if (!tutorId) return NextResponse.json({ error: 'Missing tutor_id' }, { status: 400 })
 
-  const { data, error } = await supabaseAdmin
+  // bez tutor_id → zwróć wszystkich (do siatki online)
+  let q = supabaseAdmin
     .from('tutor_availability')
-    .select('weekday, start_time, end_time')
-    .eq('tutor_id', tutorId)
+    .select(tutorId ? 'weekday, start_time, end_time' : 'tutor_id, weekday, start_time, end_time')
     .order('weekday', { ascending: true })
+  if (tutorId) q = q.eq('tutor_id', tutorId)
+
+  const { data, error } = await q
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
