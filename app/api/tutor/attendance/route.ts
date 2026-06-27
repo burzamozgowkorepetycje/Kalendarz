@@ -82,6 +82,9 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Domyślnie: „nie odbyła się" → NIE liczy się do zarobków (dopóki admin nie zmieni)
+  const earningsUpdate = (!lesson.is_group && status === 'not_held') ? { count_toward_earnings: false } : {}
+
   // Zapis na lekcji
   const { error: updErr } = await supabaseAdmin
     .from('lessons')
@@ -92,6 +95,7 @@ export async function POST(req: NextRequest) {
       attendance_note: note ? String(note).trim() : null,
       attendance_status: lesson.is_group ? null : status,
       attendance_reviewed: false,
+      ...earningsUpdate,
     })
     .eq('id', lesson_id)
 

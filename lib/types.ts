@@ -62,6 +62,7 @@ export interface Lesson {
   attendance_note: string | null
   attendance_reviewed: boolean
   needs_makeup: boolean
+  count_toward_earnings: boolean
   created_at: string
   // joins
   tutors?: Pick<Tutor, 'name' | 'email' | 'phone'>

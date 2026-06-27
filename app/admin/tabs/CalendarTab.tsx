@@ -38,6 +38,7 @@ export default function CalendarTab({ password }: { password: string }) {
     tutor_id: '', student_id: '', duration_minutes: '60',
     amount_due: '', tutor_amount: '', is_group: false,
     repeat: false, repeat_weeks: '4', lesson_type: '', subject: '',
+    count_earnings: true,
   })
   const [groupEntries, setGroupEntries] = useState<GroupEntry[]>([{ student_id: '', amount_due: '' }])
   const [saving, setSaving] = useState(false)
@@ -103,6 +104,7 @@ export default function CalendarTab({ password }: { password: string }) {
         repeat: false, repeat_weeks: '4',
         lesson_type: existing.lesson_type || '',
         subject: existing.subject || '',
+        count_earnings: existing.count_toward_earnings ?? true,
       })
       if (existing.is_group) {
         const res = await fetch(`/api/admin/lesson-students?lesson_id=${existing.id}`, { headers })
@@ -111,7 +113,7 @@ export default function CalendarTab({ password }: { password: string }) {
         setGroupEntries(ls.map((s: LessonStudent) => ({ student_id: s.student_id, amount_due: String(s.amount_due || '') })))
       }
     } else {
-      setForm({ tutor_id: '', student_id: '', duration_minutes: '60', amount_due: '', tutor_amount: '', is_group: false, repeat: false, repeat_weeks: '4', lesson_type: '', subject: '' })
+      setForm({ tutor_id: '', student_id: '', duration_minutes: '60', amount_due: '', tutor_amount: '', is_group: false, repeat: false, repeat_weeks: '4', lesson_type: '', subject: '', count_earnings: true })
       setGroupEntries([{ student_id: '', amount_due: '' }])
       setLessonStudents([])
     }
@@ -153,6 +155,7 @@ export default function CalendarTab({ password }: { password: string }) {
       lesson_type: form.lesson_type || null,
       subject: form.subject || null,
       series_id: series_id || null,
+      count_toward_earnings: form.count_earnings,
       force: force || false,
       owner_password: owner_password || undefined,
       ack_warnings: ack_warnings || false,
@@ -192,6 +195,7 @@ export default function CalendarTab({ password }: { password: string }) {
           end_time: endTime, is_group: form.is_group,
           lesson_type: form.lesson_type || null,
           subject: form.subject || null,
+          count_toward_earnings: form.count_earnings,
           force: force || false,
           owner_password: owner_password || undefined,
           ack_warnings: ack_warnings || false,
@@ -668,6 +672,12 @@ export default function CalendarTab({ password }: { password: string }) {
                 <input type="number" placeholder="np. 50" value={form.tutor_amount}
                   onChange={e => setForm({ ...form, tutor_amount: e.target.value })}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500" />
+                <label className="flex items-center gap-2 mt-2 cursor-pointer">
+                  <input type="checkbox" checked={form.count_earnings}
+                    onChange={e => setForm({ ...form, count_earnings: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600" />
+                  <span className="text-sm text-gray-700">Liczyć do zarobków korepetytora</span>
+                </label>
               </div>
 
               {/* Tags */}

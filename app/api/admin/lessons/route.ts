@@ -87,6 +87,7 @@ export async function POST(req: NextRequest) {
       lesson_type: body.lesson_type ?? null,
       subject: body.subject ?? null,
       series_id: body.series_id ?? null,
+      count_toward_earnings: body.count_toward_earnings ?? true,
       status: body.status || (body.tutor_id ? 'booked' : 'available'),
       payment_status: 'unpaid',
       reminder_sent: false,
@@ -137,6 +138,13 @@ export async function PUT(req: NextRequest) {
     }
   }
 
+  // pobierz starą kwotę wynagrodzenia (do audytu zmiany)
+  let oldTutorAmount: number | null = null
+  if ('tutor_amount' in fields) {
+    const { data: prev } = await supabaseAdmin.from('lessons').select('tutor_amount').eq('id', id).single()
+    oldTutorAmount = prev?.tutor_amount ?? null
+  }
+
   const { data, error } = await supabaseAdmin
     .from('lessons')
     .update(fields)
@@ -146,9 +154,22 @@ export async function PUT(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  const label = await describeLesson(data)
+
+  // Osobny wpis w historii dla zmiany kwoty wynagrodzenia korepetytora
+  if ('tutor_amount' in fields) {
+    const newAmount = data.tutor_amount ?? null
+    if (Number(oldTutorAmount) !== Number(newAmount)) {
+      await logAudit({
+        actor_type: 'admin', actor_name: 'Administracja', action: 'update',
+        summary: `Zmiana wynagrodzenia korepetytora: ${oldTutorAmount ?? '—'} zł → ${newAmount ?? '—'} zł (${label})`,
+      })
+    }
+  }
+
   await logAudit({
     actor_type: 'admin', actor_name: 'Administracja', action: 'update',
-    summary: `Edytowano zajęcia: ${await describeLesson(data)}`,
+    summary: `Edytowano zajęcia: ${label}`,
   })
 
   return NextResponse.json(data)

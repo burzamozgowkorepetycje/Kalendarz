@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
       summary = `Obecność rozpatrzona — oznaczono do odrobienia: ${label}`
       break
     case 'cancel':
-      await supabaseAdmin.from('lessons').update({ status: 'cancelled', attendance_reviewed: true }).eq('id', lesson_id)
+      await supabaseAdmin.from('lessons').update({ status: 'cancelled', attendance_reviewed: true, count_toward_earnings: false }).eq('id', lesson_id)
       summary = `Obecność rozpatrzona — lekcja anulowana: ${label}`
       break
     case 'dismiss':

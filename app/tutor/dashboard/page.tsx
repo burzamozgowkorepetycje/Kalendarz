@@ -1,10 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, X, Plus, LogOut, User, Users, CalendarClock } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, Plus, LogOut, User, Users, CalendarClock, Wallet } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import AvailabilityEditor, { Slot } from '@/app/components/AvailabilityEditor'
 import AttendanceSection from '@/app/tutor/AttendanceSection'
+import MyEarnings from '@/app/tutor/MyEarnings'
 
 interface Student { id: string; name: string }
 interface CalendarLesson {
@@ -20,6 +21,7 @@ interface CalendarLesson {
   student_id: string | null
   lesson_type: string | null
   subject: string | null
+  tutor_amount: number | null
   tutors?: { name: string } | null
   students?: { name: string } | null
 }
@@ -46,6 +48,7 @@ export default function TutorDashboard() {
   const [error, setError] = useState('')
   const [loadingCal, setLoadingCal] = useState(false)
   const [showAvailability, setShowAvailability] = useState(false)
+  const [showEarnings, setShowEarnings] = useState(false)
 
   const dateStr = toDateStr(currentDate)
 
@@ -134,6 +137,9 @@ export default function TutorDashboard() {
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">
         <h1 className="text-base font-bold text-gray-900">Panel korepetytora</h1>
         <div className="flex items-center gap-3">
+          <button onClick={() => setShowEarnings(true)} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
+            <Wallet size={16} /> Zarobki
+          </button>
           <button onClick={() => setShowAvailability(true)} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
             <CalendarClock size={16} /> Dostępność
           </button>
@@ -142,6 +148,18 @@ export default function TutorDashboard() {
           </button>
         </div>
       </div>
+
+      {showEarnings && (
+        <div className="fixed inset-0 z-50 bg-gray-50 overflow-y-auto">
+          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0">
+            <h1 className="text-base font-bold text-gray-900">Moje zarobki</h1>
+            <button onClick={() => setShowEarnings(false)} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+              ← Wróć do grafiku
+            </button>
+          </div>
+          <MyEarnings />
+        </div>
+      )}
 
       {showAvailability && (
         <AvailabilityEditor
@@ -221,6 +239,9 @@ export default function TutorDashboard() {
                               </p>
                             </div>
                             <p className="text-gray-500 text-xs">{String(lesson.start_time).substring(0,5)} · {lesson.duration_minutes} min</p>
+                            {isMine && lesson.tutor_amount != null && (
+                              <p className="text-blue-700 text-xs font-medium">Twoje wynagrodzenie: {lesson.tutor_amount} zł</p>
+                            )}
                           </button>
                         </td>
                       )

@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await supabaseAdmin
     .from('lessons')
-    .select('id, date, start_time, end_time, duration_minutes, room, status, is_group, tutor_id, student_id, tutors(name), students(name)')
+    .select('id, date, start_time, end_time, duration_minutes, room, status, is_group, tutor_id, student_id, tutor_amount, tutors(name), students(name)')
     .eq('date', date)
     .order('start_time', { ascending: true })
 
