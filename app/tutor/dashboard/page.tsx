@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, X, Plus, LogOut, User, Users, CalendarClock } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import AvailabilityEditor, { Slot } from '@/app/components/AvailabilityEditor'
+import AttendanceSection from '@/app/tutor/AttendanceSection'
 
 interface Student { id: string; name: string }
 interface CalendarLesson {
@@ -159,6 +160,9 @@ export default function TutorDashboard() {
           onClose={() => setShowAvailability(false)}
         />
       )}
+
+      {/* Sekcja obecności do uzupełnienia */}
+      <AttendanceSection />
 
       {/* Date nav */}
       <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between">

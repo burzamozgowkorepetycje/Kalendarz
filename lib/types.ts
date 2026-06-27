@@ -18,6 +18,7 @@ export interface LessonStudent {
   student_id: string
   amount_due: number | null
   payment_status: 'unpaid' | 'paid'
+  attendance: 'present' | 'absent' | 'na' | null
   created_at: string
   students?: Pick<Student, 'name' | 'email' | 'phone'>
 }
@@ -53,6 +54,14 @@ export interface Lesson {
   lesson_type: string | null
   subject: string | null
   series_id: string | null
+  // Obecność uzupełniana przez korepetytora
+  attendance_status: 'present' | 'absent' | 'not_held' | null
+  attendance_submitted: boolean
+  attendance_submitted_by: string | null
+  attendance_submitted_at: string | null
+  attendance_note: string | null
+  attendance_reviewed: boolean
+  needs_makeup: boolean
   created_at: string
   // joins
   tutors?: Pick<Tutor, 'name' | 'email' | 'phone'>

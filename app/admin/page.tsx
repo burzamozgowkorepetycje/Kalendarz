@@ -9,6 +9,7 @@ import ReportsTab from './tabs/ReportsTab'
 import CalendarTab from './tabs/CalendarTab'
 import PaymentsTab from './tabs/PaymentsTab'
 import HistoryTab from './tabs/HistoryTab'
+import AttendanceReviewTab from './tabs/AttendanceReviewTab'
 
 const TABS = [
   { id: 'calendar', label: 'Kalendarz' },
@@ -16,6 +17,7 @@ const TABS = [
   { id: 'students', label: 'Uczniowie' },
   { id: 'payments', label: 'Płatności' },
   { id: 'attendance', label: 'Obecność' },
+  { id: 'review', label: 'Do sprawdzenia' },
   { id: 'reports', label: 'Raporty' },
   { id: 'history', label: 'Historia' },
 ]
@@ -116,6 +118,7 @@ export default function AdminPage() {
         {activeTab === 'students' && <StudentsTab password={password} />}
         {activeTab === 'payments' && <PaymentsTab password={password} />}
         {activeTab === 'attendance' && <AttendanceTab password={password} />}
+        {activeTab === 'review' && <AttendanceReviewTab password={password} />}
         {activeTab === 'reports' && <ReportsTab password={password} />}
         {activeTab === 'history' && <HistoryTab password={password} />}
       </main>
