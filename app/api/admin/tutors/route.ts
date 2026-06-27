@@ -36,7 +36,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { name, email, phone } = await req.json()
+    const body = await req.json()
+    const { name, email, phone } = body
 
     if (!name || !email) {
       return NextResponse.json(
@@ -55,6 +56,9 @@ export async function POST(req: NextRequest) {
         phone: phone || null,
         unique_link: uniqueLink,
         active: true,
+        rate_individual: body.rate_individual ?? null,
+        rate_pair: body.rate_pair ?? null,
+        rate_group: body.rate_group ?? null,
       })
       .select()
 
@@ -64,6 +68,29 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json(data[0])
   } catch (error) {
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+export async function PUT(req: NextRequest) {
+  if (!verifyAdmin(req)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  try {
+    const { id, ...fields } = await req.json()
+    if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
+
+    const { data, error } = await supabaseAdmin
+      .from('tutors')
+      .update(fields)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data)
+  } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

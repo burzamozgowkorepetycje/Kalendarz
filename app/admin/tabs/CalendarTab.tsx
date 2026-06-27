@@ -123,6 +123,15 @@ export default function CalendarTab({ password }: { password: string }) {
     return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
   }
 
+  // Sugerowana stawka wg typu zajęć (indywidualne / para / grupa)
+  const rateFor = (obj: { rate_individual: number | null; rate_pair: number | null; rate_group: number | null } | undefined,
+                   type: 'individual' | 'pair' | 'group'): string => {
+    if (!obj) return ''
+    const v = type === 'individual' ? obj.rate_individual : type === 'pair' ? obj.rate_pair : obj.rate_group
+    return v != null ? String(v) : ''
+  }
+  const groupCount = () => groupEntries.filter(e => e.student_id).length
+
   const studentIds = () =>
     form.is_group
       ? groupEntries.filter(e => e.student_id).map(e => e.student_id)
@@ -580,7 +589,12 @@ export default function CalendarTab({ password }: { password: string }) {
               {/* Tutor */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Korepetytor</label>
-                <select value={form.tutor_id} onChange={e => setForm({ ...form, tutor_id: e.target.value })}
+                <select value={form.tutor_id}
+                  onChange={e => {
+                    const t = tutors.find(x => x.id === e.target.value)
+                    const type = !form.is_group ? 'individual' : (groupCount() === 2 ? 'pair' : 'group')
+                    setForm(f => ({ ...f, tutor_id: e.target.value, tutor_amount: f.tutor_amount || rateFor(t, type) }))
+                  }}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500">
                   <option value="">— wybierz —</option>
                   {tutors.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -592,7 +606,11 @@ export default function CalendarTab({ password }: { password: string }) {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Uczeń</label>
-                    <select value={form.student_id} onChange={e => setForm({ ...form, student_id: e.target.value })}
+                    <select value={form.student_id}
+                      onChange={e => {
+                        const s = students.find(x => x.id === e.target.value)
+                        setForm(f => ({ ...f, student_id: e.target.value, amount_due: f.amount_due || rateFor(s, 'individual') }))
+                      }}
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500">
                       <option value="">— wybierz —</option>
                       {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -615,7 +633,13 @@ export default function CalendarTab({ password }: { password: string }) {
                     {groupEntries.map((entry, i) => (
                       <div key={i} className="flex gap-2">
                         <select value={entry.student_id}
-                          onChange={e => { const ne = [...groupEntries]; ne[i].student_id = e.target.value; setGroupEntries(ne) }}
+                          onChange={e => {
+                            const ne = [...groupEntries]; ne[i].student_id = e.target.value
+                            const count = ne.filter(g => g.student_id).length
+                            const s = students.find(x => x.id === e.target.value)
+                            if (!ne[i].amount_due) ne[i].amount_due = rateFor(s, count === 2 ? 'pair' : 'group')
+                            setGroupEntries(ne)
+                          }}
                           className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-purple-500">
                           <option value="">— uczeń —</option>
                           {students.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}

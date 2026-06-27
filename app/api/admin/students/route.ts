@@ -20,12 +20,20 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { name, email, phone, hourly_rate, notes } = await req.json()
-  if (!name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
+  const body = await req.json()
+  if (!body.name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
 
   const { data, error } = await supabaseAdmin
     .from('students')
-    .insert({ name, email, phone, hourly_rate, notes })
+    .insert({
+      name: body.name,
+      email: body.email || null,
+      phone: body.phone || null,
+      notes: body.notes || null,
+      rate_individual: body.rate_individual ?? null,
+      rate_pair: body.rate_pair ?? null,
+      rate_group: body.rate_group ?? null,
+    })
     .select()
     .single()
 

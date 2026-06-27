@@ -3,12 +3,16 @@
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, BookOpen } from 'lucide-react'
 import { Student, Lesson } from '@/lib/types'
+import RateInputs, { Rates, EMPTY_RATES, ratesToNumbers } from '@/app/components/RateInputs'
 
 export default function StudentsTab({ password }: { password: string }) {
   const [students, setStudents] = useState<Student[]>([])
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [history, setHistory] = useState<Lesson[]>([])
   const [form, setForm] = useState<{ name: string; email: string; phone: string; notes: string }>({ name: '', email: '', phone: '', notes: '' })
+  const [rates, setRates] = useState<Rates>(EMPTY_RATES)
+  const [editRates, setEditRates] = useState<Rates>(EMPTY_RATES)
+  const [savingRates, setSavingRates] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
@@ -19,9 +23,29 @@ export default function StudentsTab({ password }: { password: string }) {
 
   const loadHistory = async (student: Student) => {
     setSelectedStudent(student)
+    setEditRates({
+      rate_individual: student.rate_individual != null ? String(student.rate_individual) : '',
+      rate_pair: student.rate_pair != null ? String(student.rate_pair) : '',
+      rate_group: student.rate_group != null ? String(student.rate_group) : '',
+    })
     const res = await fetch(`/api/admin/lessons?student_id=${student.id}`, { headers })
     const data = await res.json()
     setHistory(data)
+  }
+
+  const saveRates = async () => {
+    if (!selectedStudent) return
+    setSavingRates(true)
+    const res = await fetch('/api/admin/students', {
+      method: 'PUT', headers,
+      body: JSON.stringify({ id: selectedStudent.id, ...ratesToNumbers(editRates) }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setStudents(students.map(s => s.id === updated.id ? updated : s))
+      setSelectedStudent(updated)
+    }
+    setSavingRates(false)
   }
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -31,12 +55,13 @@ export default function StudentsTab({ password }: { password: string }) {
     const res = await fetch('/api/admin/students', {
       method: 'POST',
       headers,
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, ...ratesToNumbers(rates) }),
     })
     if (res.ok) {
       const s = await res.json()
       setStudents([s, ...students])
       setForm({ name: '', email: '', phone: '', notes: '' })
+      setRates(EMPTY_RATES)
     }
     setLoading(false)
   }
@@ -68,6 +93,10 @@ export default function StudentsTab({ password }: { password: string }) {
           <input placeholder="Notatki" value={form.notes}
             onChange={e => setForm({ ...form, notes: e.target.value })}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500" />
+          <div className="md:col-span-4">
+            <p className="text-xs font-semibold text-gray-500 mb-1.5">Sugerowane stawki ucznia (kwota do zapłaty)</p>
+            <RateInputs value={rates} onChange={setRates} />
+          </div>
           <button type="submit" disabled={loading}
             className="md:col-span-4 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
             {loading ? 'Dodawanie...' : 'Dodaj ucznia'}
@@ -116,6 +145,16 @@ export default function StudentsTab({ password }: { password: string }) {
               {selectedStudent ? `Historia: ${selectedStudent.name}` : 'Wybierz ucznia aby zobaczyć historię'}
             </span>
           </div>
+          {selectedStudent && (
+            <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50">
+              <p className="text-xs font-semibold text-gray-500 mb-1.5">Sugerowane stawki</p>
+              <RateInputs value={editRates} onChange={setEditRates} compact />
+              <button onClick={saveRates} disabled={savingRates}
+                className="mt-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50">
+                {savingRates ? 'Zapisywanie...' : 'Zapisz stawki'}
+              </button>
+            </div>
+          )}
           {!selectedStudent ? (
             <p className="px-6 py-8 text-center text-gray-400 text-sm">Kliknij na ucznia</p>
           ) : history.length === 0 ? (

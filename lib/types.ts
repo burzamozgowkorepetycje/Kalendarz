@@ -5,6 +5,9 @@ export interface Tutor {
   phone: string | null
   unique_link: string
   hourly_rate: number | null
+  rate_individual: number | null
+  rate_pair: number | null
+  rate_group: number | null
   active: boolean
   created_at: string
 }
@@ -25,6 +28,9 @@ export interface Student {
   email: string | null
   phone: string | null
   notes: string | null
+  rate_individual: number | null
+  rate_pair: number | null
+  rate_group: number | null
   created_at: string
 }
 

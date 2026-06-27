@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, Copy, KeyRound, X, CalendarClock } from 'lucide-react'
 import { Tutor } from '@/lib/types'
 import AvailabilityEditor, { Slot } from '@/app/components/AvailabilityEditor'
+import RateInputs, { Rates, EMPTY_RATES, ratesToNumbers } from '@/app/components/RateInputs'
 
 interface PasswordModal {
   tutorId: string
@@ -16,6 +17,10 @@ export default function TutorsTab({ password }: { password: string }) {
   const [loading, setLoading] = useState(false)
   const [passwordModal, setPasswordModal] = useState<PasswordModal | null>(null)
   const [availTutor, setAvailTutor] = useState<{ id: string; name: string } | null>(null)
+  const [addRates, setAddRates] = useState<Rates>(EMPTY_RATES)
+  const [ratesModal, setRatesModal] = useState<{ id: string; name: string } | null>(null)
+  const [editRates, setEditRates] = useState<Rates>(EMPTY_RATES)
+  const [savingRates, setSavingRates] = useState(false)
   const [pwForm, setPwForm] = useState({ login: '', password: '', password2: '' })
   const [pwLoading, setPwLoading] = useState(false)
   const [pwError, setPwError] = useState('')
@@ -40,8 +45,33 @@ export default function TutorsTab({ password }: { password: string }) {
       const tutor = await res.json()
       setTutors([tutor, ...tutors])
       setForm({ name: '', email: '', phone: '' })
+      setAddRates(EMPTY_RATES)
     }
     setLoading(false)
+  }
+
+  const openRatesModal = (tutor: Tutor) => {
+    setRatesModal({ id: tutor.id, name: tutor.name })
+    setEditRates({
+      rate_individual: tutor.rate_individual != null ? String(tutor.rate_individual) : '',
+      rate_pair: tutor.rate_pair != null ? String(tutor.rate_pair) : '',
+      rate_group: tutor.rate_group != null ? String(tutor.rate_group) : '',
+    })
+  }
+
+  const saveRates = async () => {
+    if (!ratesModal) return
+    setSavingRates(true)
+    const res = await fetch('/api/admin/tutors', {
+      method: 'PUT', headers,
+      body: JSON.stringify({ id: ratesModal.id, ...ratesToNumbers(editRates) }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setTutors(tutors.map(t => t.id === updated.id ? updated : t))
+      setRatesModal(null)
+    }
+    setSavingRates(false)
   }
 
   const handleDelete = async (id: string) => {
@@ -104,6 +134,10 @@ export default function TutorsTab({ password }: { password: string }) {
           <input placeholder="Telefon (+48...)" value={form.phone}
             onChange={e => setForm({ ...form, phone: e.target.value })}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500" />
+          <div className="col-span-2 md:col-span-3">
+            <p className="text-xs font-semibold text-gray-500 mb-1.5">Sugerowane stawki korepetytora (wypłata)</p>
+            <RateInputs value={addRates} onChange={setAddRates} />
+          </div>
           <button type="submit" disabled={loading}
             className="md:col-span-3 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
             {loading ? 'Dodawanie...' : 'Dodaj korepetytora'}
@@ -127,6 +161,10 @@ export default function TutorsTab({ password }: { password: string }) {
                   <p className="text-sm text-gray-600">{tutor.email} · {tutor.phone || 'brak telefonu'}</p>
                 </div>
                 <div className="flex gap-2">
+                  <button onClick={() => openRatesModal(tutor)}
+                    className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-sm hover:bg-amber-100">
+                    Stawki
+                  </button>
                   <button onClick={() => setAvailTutor({ id: tutor.id, name: tutor.name })}
                     className="flex items-center gap-1 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100">
                     <CalendarClock size={14} /> Grafik
@@ -149,6 +187,24 @@ export default function TutorsTab({ password }: { password: string }) {
           </div>
         )}
       </div>
+
+      {/* Rates modal */}
+      {ratesModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-gray-900">Stawki korepetytora</h2>
+              <button onClick={() => setRatesModal(null)} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">{ratesModal.name} — sugerowana wypłata za lekcję</p>
+            <RateInputs value={editRates} onChange={setEditRates} />
+            <button onClick={saveRates} disabled={savingRates}
+              className="w-full mt-4 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
+              {savingRates ? 'Zapisywanie...' : 'Zapisz stawki'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Availability editor */}
       {availTutor && (
