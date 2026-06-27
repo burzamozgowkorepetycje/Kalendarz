@@ -147,8 +147,9 @@ export default function CalendarTab({ password }: { password: string }) {
   }
 
   // dostępność korepetytora online w danej godzinie (dla siatki online)
+  // w siatce online pokazujemy tylko korepetytorów z zajęciami online tego dnia
   const onlineLessonTutorIds = new Set(lessons.map(l => l.tutor_id))
-  const onlineTutors = tutors.filter(t => t.meet_link || onlineLessonTutorIds.has(t.id))
+  const onlineTutors = tutors.filter(t => onlineLessonTutorIds.has(t.id))
   const tutorAvailableAt = (tutorId: string, hour: string) => {
     const rows = availAll.filter(a => a.tutor_id === tutorId)
     if (rows.length === 0) return true
@@ -432,7 +433,7 @@ export default function CalendarTab({ password }: { password: string }) {
       {location === 'Online' && (
         onlineTutors.length === 0 ? (
           <div className="bg-white rounded-xl border border-gray-200 px-4 py-10 text-center text-gray-400 text-sm">
-            Brak korepetytorów online. Ustaw <span className="font-medium">link Google Meet</span> przy korepetytorze (zakładka Korepetytorzy → „Stawki"), aby pojawił się tutaj jako kolumna.
+            Brak zajęć online tego dnia. Kliknij „Dodaj" lub „Znajdź termin", aby umówić zajęcia online z wybranym korepetytorem.
           </div>
         ) : (
           <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
