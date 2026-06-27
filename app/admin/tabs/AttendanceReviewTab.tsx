@@ -4,8 +4,9 @@ import { useState, useEffect } from 'react'
 import { Lesson } from '@/lib/types'
 
 interface GroupStudent { student_id: string; attendance: string | null; students?: { name: string } | null }
-interface ReviewLesson extends Lesson {
+interface ReviewLesson extends Omit<Lesson, 'tutors' | 'students'> {
   tutors?: { name: string } | null
+  students?: { name: string } | null
   lesson_students?: GroupStudent[]
 }
 
