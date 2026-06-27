@@ -56,6 +56,7 @@ export async function POST(req: NextRequest) {
         phone: phone || null,
         unique_link: uniqueLink,
         active: true,
+        meet_link: body.meet_link || null,
         rate_individual: body.rate_individual ?? null,
         rate_pair: body.rate_pair ?? null,
         rate_group: body.rate_group ?? null,

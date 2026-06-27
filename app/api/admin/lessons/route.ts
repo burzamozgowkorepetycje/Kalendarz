@@ -20,10 +20,11 @@ export async function GET(req: NextRequest) {
   const tutorId = searchParams.get('tutor_id')
   const from = searchParams.get('from')
   const to = searchParams.get('to')
+  const location = searchParams.get('location')
 
   let query = supabaseAdmin
     .from('lessons')
-    .select('*, tutors(name, email, phone), students(name, email, phone)')
+    .select('*, tutors(name, email, phone, meet_link), students(name, email, phone)')
     .order('date', { ascending: false })
     .order('start_time', { ascending: true })
 
@@ -31,6 +32,7 @@ export async function GET(req: NextRequest) {
   if (tutorId) query = query.eq('tutor_id', tutorId)
   if (from) query = query.gte('date', from)
   if (to) query = query.lte('date', to)
+  if (location) query = query.eq('location', location)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -47,9 +49,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  const room = body.room || 'Sala 1'
+  const isOnline = body.location === 'Online'
+  const room = isOnline ? null : (body.room || 'Sala 1')
 
-  // Wykrywanie kolizji: sala + korepetytor + uczeń/grupa
+  // Wykrywanie kolizji: sala (tylko stacjonarnie) + korepetytor + uczeń/grupa
   const conflicts = await findLessonConflicts({
     date, start_time, end_time, room,
     tutor_id: body.tutor_id || null,
@@ -82,7 +85,8 @@ export async function POST(req: NextRequest) {
       student_id: body.student_id || null,
       amount_due: body.amount_due ?? null,
       tutor_amount: body.tutor_amount ?? null,
-      room: body.room || 'Sala 1',
+      room,
+      location: body.location || 'Wyszków',
       is_group: body.is_group ?? false,
       lesson_type: body.lesson_type ?? null,
       subject: body.subject ?? null,
@@ -111,11 +115,11 @@ export async function PUT(req: NextRequest) {
   const { id, force, owner_password, student_ids, ack_warnings, ...fields } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-  // Walidacja kolizji przy zmianie terminu (jeśli przekazano date/room/godziny)
-  if (fields.date && fields.room && fields.start_time && fields.end_time) {
+  // Walidacja kolizji przy zmianie terminu (sala opcjonalna — online nie ma sali)
+  if (fields.date && fields.start_time && fields.end_time) {
     const conflicts = await findLessonConflicts({
       date: fields.date, start_time: fields.start_time, end_time: fields.end_time,
-      room: fields.room, tutor_id: fields.tutor_id || null,
+      room: fields.room || null, tutor_id: fields.tutor_id || null,
       studentIds: Array.isArray(student_ids) ? student_ids : (fields.student_id ? [fields.student_id] : []),
       excludeId: id,
     })

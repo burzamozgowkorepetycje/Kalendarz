@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, X, Plus, RefreshCw, Users, User, Trash2, CalendarDays, Calendar, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, Plus, RefreshCw, Users, User, Trash2, CalendarDays, Calendar, Search, Video, MapPin, Send } from 'lucide-react'
 import { Tutor, Student, Lesson, LessonStudent } from '@/lib/types'
 import Combobox from '@/app/components/Combobox'
 
@@ -29,6 +29,8 @@ function toDateStr(d: Date) { return d.toISOString().split('T')[0] }
 
 export default function CalendarTab({ password }: { password: string }) {
   const [view, setView] = useState<'day' | 'week'>('day')
+  const [location, setLocation] = useState<'Wyszków' | 'Online'>('Wyszków')
+  const [sendingMeet, setSendingMeet] = useState<string | null>(null)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [tutors, setTutors] = useState<Tutor[]>([])
@@ -70,12 +72,13 @@ export default function CalendarTab({ password }: { password: string }) {
     fetch('/api/admin/students', { headers }).then(r => r.json()).then(setStudents)
   }, [])
 
-  useEffect(() => { loadLessons() }, [dateStr, view])
+  useEffect(() => { loadLessons() }, [dateStr, view, location])
 
   const loadLessons = async () => {
-    const from = view === 'week' ? weekFrom : dateStr
-    const to = view === 'week' ? weekTo : dateStr
-    const res = await fetch(`/api/admin/lessons?from=${from}&to=${to}`, { headers })
+    const online = location === 'Online'
+    const from = (view === 'week' && !online) ? weekFrom : dateStr
+    const to = (view === 'week' && !online) ? weekTo : dateStr
+    const res = await fetch(`/api/admin/lessons?from=${from}&to=${to}&location=${encodeURIComponent(location)}`, { headers })
     const data = await res.json()
     setLessons(Array.isArray(data) ? data : [])
   }
@@ -94,11 +97,7 @@ export default function CalendarTab({ password }: { password: string }) {
   const getLessonsForDayHour = (date: string, hour: string) =>
     lessons.filter(l => l.date === date && sameHourBucket(l.start_time, hour))
 
-  const openModal = async (hour: string, room: string, date?: string) => {
-    const modalDate = date || dateStr
-    const existing = getLessonForSlot(hour, room, modalDate)
-    const startTime = existing ? String(existing.start_time).substring(0, 5) : hour
-    setModal({ date: modalDate, room, start_time: startTime, lesson: existing })
+  const loadModalForm = async (existing?: Lesson) => {
     if (existing) {
       setForm({
         tutor_id: existing.tutor_id || '',
@@ -117,12 +116,28 @@ export default function CalendarTab({ password }: { password: string }) {
         const ls = await res.json()
         setLessonStudents(ls)
         setGroupEntries(ls.map((s: LessonStudent) => ({ student_id: s.student_id, amount_due: String(s.amount_due || '') })))
+      } else {
+        setGroupEntries([{ student_id: '', amount_due: '' }])
+        setLessonStudents([])
       }
     } else {
       setForm({ tutor_id: '', student_id: '', duration_minutes: '60', amount_due: '', tutor_amount: '', is_group: false, repeat: false, repeat_weeks: '4', lesson_type: '', subject: '', count_earnings: true })
       setGroupEntries([{ student_id: '', amount_due: '' }])
       setLessonStudents([])
     }
+  }
+
+  const openModal = async (hour: string, room: string, date?: string) => {
+    const modalDate = date || dateStr
+    const existing = getLessonForSlot(hour, room, modalDate)
+    const startTime = existing ? String(existing.start_time).substring(0, 5) : hour
+    setModal({ date: modalDate, room, start_time: startTime, lesson: existing })
+    await loadModalForm(existing)
+  }
+
+  const openOnlineModal = async (existing?: Lesson) => {
+    setModal({ date: dateStr, room: 'Online', start_time: existing ? String(existing.start_time).substring(0, 5) : '15:00', lesson: existing })
+    await loadModalForm(existing)
   }
 
   const calcEndTime = (start: string, minutes: number) => {
@@ -156,7 +171,7 @@ export default function CalendarTab({ password }: { password: string }) {
       student_ids: studentIds(),
       amount_due: form.is_group ? null : (form.amount_due ? Number(form.amount_due) : null),
       tutor_amount: form.tutor_amount ? Number(form.tutor_amount) : null,
-      room: modal.room, is_group: form.is_group,
+      room: modal.room, location, is_group: form.is_group,
       status: form.tutor_id ? 'booked' : 'available',
       lesson_type: form.lesson_type || null,
       subject: form.subject || null,
@@ -190,7 +205,8 @@ export default function CalendarTab({ password }: { password: string }) {
         body: JSON.stringify({
           id: modal.lesson.id,
           date: modal.date,
-          room: modal.room,
+          room: location === 'Online' ? null : modal.room,
+          location,
           start_time: modal.start_time,
           tutor_id: form.tutor_id || null,
           student_id: form.is_group ? null : (form.student_id || null),
@@ -314,6 +330,14 @@ export default function CalendarTab({ password }: { password: string }) {
     setFindOpen(false)
   }
 
+  const sendMeet = async (lessonId: string) => {
+    setSendingMeet(lessonId)
+    const res = await fetch('/api/admin/send-meet', { method: 'POST', headers, body: JSON.stringify({ lesson_id: lessonId }) })
+    const data = await res.json().catch(() => ({}))
+    setSendingMeet(null)
+    alert(res.ok ? `Link Meet wysłany (${data.sent} SMS)` : `Nie wysłano: ${data.error || 'błąd'}`)
+  }
+
   const prevDay = () => { const d = new Date(currentDate); d.setDate(d.getDate() - 1); setCurrentDate(d) }
   const nextDay = () => { const d = new Date(currentDate); d.setDate(d.getDate() + 1); setCurrentDate(d) }
   const prevWeek = () => { const d = new Date(currentDate); d.setDate(d.getDate() - 7); setCurrentDate(d) }
@@ -330,9 +354,20 @@ export default function CalendarTab({ password }: { password: string }) {
 
   return (
     <div className="space-y-4">
+      {/* Location selector */}
+      <div className="flex bg-gray-100 rounded-lg p-1 gap-1 w-fit">
+        {(['Wyszków', 'Online'] as const).map(loc => (
+          <button key={loc} onClick={() => { setLocation(loc); if (loc === 'Online') setView('day') }}
+            className={`flex items-center gap-1.5 px-4 py-1.5 rounded-md text-sm font-medium transition ${location === loc ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
+            {loc === 'Online' ? <Video size={15} /> : <MapPin size={15} />} {loc}
+          </button>
+        ))}
+      </div>
+
       {/* Nav bar */}
       <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-        {/* View toggle */}
+        {/* View toggle — tylko stacjonarnie */}
+        {location !== 'Online' && (
         <div className="flex bg-gray-100 rounded-lg p-1 gap-1 self-center sm:self-auto">
           <button onClick={() => setView('day')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition ${view === 'day' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-500 hover:text-gray-700'}`}>
@@ -343,6 +378,7 @@ export default function CalendarTab({ password }: { password: string }) {
             <CalendarDays size={15} /> Tydzień
           </button>
         </div>
+        )}
 
         {/* Date navigation */}
         <div className="flex items-center gap-2 flex-1 justify-between sm:justify-center">
@@ -357,14 +393,58 @@ export default function CalendarTab({ password }: { password: string }) {
             <ChevronRight size={20} className="text-gray-700" />
           </button>
         </div>
-        <button onClick={() => { setFindOpen(true); setProposals([]); setFindSearched(false) }}
-          className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 shrink-0">
-          <Search size={15} /> Znajdź termin
-        </button>
+        {location === 'Online' ? (
+          <button onClick={() => openOnlineModal()}
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 shrink-0">
+            <Plus size={15} /> Dodaj zajęcia online
+          </button>
+        ) : (
+          <button onClick={() => { setFindOpen(true); setProposals([]); setFindSearched(false) }}
+            className="flex items-center gap-1.5 px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 shrink-0">
+            <Search size={15} /> Znajdź termin
+          </button>
+        )}
       </div>
 
+      {/* ONLINE VIEW — agenda z linkami Meet */}
+      {location === 'Online' && (
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+            <Video size={16} className="text-blue-600" />
+            <span className="text-sm font-semibold text-gray-700">Zajęcia online — {dayLabel}</span>
+          </div>
+          {lessons.length === 0 ? (
+            <p className="px-4 py-10 text-center text-gray-400 text-sm">Brak zajęć online tego dnia. Kliknij „Dodaj zajęcia online".</p>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {[...lessons].sort((a, b) => String(a.start_time).localeCompare(String(b.start_time))).map(lesson => (
+                <div key={lesson.id} className="px-4 py-3 flex items-center justify-between gap-3">
+                  <button onClick={() => openOnlineModal(lesson)} className="text-left min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      {lesson.is_group ? <Users size={13} className="text-purple-500 shrink-0" /> : <User size={13} className="text-gray-400 shrink-0" />}
+                      <span className="text-sm font-medium text-gray-900 truncate">
+                        {tutors.find(t => t.id === lesson.tutor_id)?.name || '—'}
+                        {!lesson.is_group && ` → ${students.find(s => s.id === lesson.student_id)?.name || '—'}`}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {String(lesson.start_time).substring(0, 5)}–{String(lesson.end_time).substring(0, 5)} · {lesson.duration_minutes} min
+                      {lesson.subject ? ` · ${lesson.subject}` : ''}{lesson.is_group ? ' · Grupa' : ''}
+                    </p>
+                  </button>
+                  <button onClick={() => sendMeet(lesson.id)} disabled={sendingMeet === lesson.id}
+                    className="shrink-0 flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg text-xs font-medium hover:bg-blue-100 disabled:opacity-50">
+                    <Send size={13} /> {sendingMeet === lesson.id ? 'Wysyłam...' : 'Wyślij link Meet'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* DAY VIEW */}
-      {view === 'day' && (
+      {location !== 'Online' && view === 'day' && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full min-w-[900px] border-collapse">
             <thead>
@@ -412,7 +492,7 @@ export default function CalendarTab({ password }: { password: string }) {
       )}
 
       {/* WEEK VIEW */}
-      {view === 'week' && (
+      {location !== 'Online' && view === 'week' && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <table className="w-full min-w-[800px] border-collapse">
             <thead>

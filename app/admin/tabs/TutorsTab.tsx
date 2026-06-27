@@ -13,13 +13,14 @@ interface PasswordModal {
 
 export default function TutorsTab({ password }: { password: string }) {
   const [tutors, setTutors] = useState<Tutor[]>([])
-  const [form, setForm] = useState({ name: '', email: '', phone: '' })
+  const [form, setForm] = useState({ name: '', email: '', phone: '', meet_link: '' })
   const [loading, setLoading] = useState(false)
   const [passwordModal, setPasswordModal] = useState<PasswordModal | null>(null)
   const [availTutor, setAvailTutor] = useState<{ id: string; name: string } | null>(null)
   const [addRates, setAddRates] = useState<Rates>(EMPTY_RATES)
   const [ratesModal, setRatesModal] = useState<{ id: string; name: string } | null>(null)
   const [editRates, setEditRates] = useState<Rates>(EMPTY_RATES)
+  const [editMeet, setEditMeet] = useState('')
   const [savingRates, setSavingRates] = useState(false)
   const [pwForm, setPwForm] = useState({ login: '', password: '', password2: '' })
   const [pwLoading, setPwLoading] = useState(false)
@@ -44,7 +45,7 @@ export default function TutorsTab({ password }: { password: string }) {
     if (res.ok) {
       const tutor = await res.json()
       setTutors([tutor, ...tutors])
-      setForm({ name: '', email: '', phone: '' })
+      setForm({ name: '', email: '', phone: '', meet_link: '' })
       setAddRates(EMPTY_RATES)
     }
     setLoading(false)
@@ -57,6 +58,7 @@ export default function TutorsTab({ password }: { password: string }) {
       rate_pair: tutor.rate_pair != null ? String(tutor.rate_pair) : '',
       rate_group: tutor.rate_group != null ? String(tutor.rate_group) : '',
     })
+    setEditMeet(tutor.meet_link || '')
   }
 
   const saveRates = async () => {
@@ -64,7 +66,7 @@ export default function TutorsTab({ password }: { password: string }) {
     setSavingRates(true)
     const res = await fetch('/api/admin/tutors', {
       method: 'PUT', headers,
-      body: JSON.stringify({ id: ratesModal.id, ...ratesToNumbers(editRates) }),
+      body: JSON.stringify({ id: ratesModal.id, ...ratesToNumbers(editRates), meet_link: editMeet || null }),
     })
     if (res.ok) {
       const updated = await res.json()
@@ -134,6 +136,9 @@ export default function TutorsTab({ password }: { password: string }) {
           <input placeholder="Telefon (+48...)" value={form.phone}
             onChange={e => setForm({ ...form, phone: e.target.value })}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500" />
+          <input placeholder="Link Google Meet (do zajęć online)" value={form.meet_link}
+            onChange={e => setForm({ ...form, meet_link: e.target.value })}
+            className="col-span-2 md:col-span-3 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500" />
           <div className="col-span-2 md:col-span-3">
             <p className="text-xs font-semibold text-gray-500 mb-1.5">Sugerowane stawki korepetytora (wypłata)</p>
             <RateInputs value={addRates} onChange={setAddRates} />
@@ -198,6 +203,12 @@ export default function TutorsTab({ password }: { password: string }) {
             </div>
             <p className="text-sm text-gray-500 mb-4">{ratesModal.name} — sugerowana wypłata za lekcję</p>
             <RateInputs value={editRates} onChange={setEditRates} />
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-gray-500 mb-1">Link Google Meet (zajęcia online)</label>
+              <input value={editMeet} onChange={e => setEditMeet(e.target.value)}
+                placeholder="https://meet.google.com/..."
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500" />
+            </div>
             <button onClick={saveRates} disabled={savingRates}
               className="w-full mt-4 bg-blue-600 text-white rounded-lg py-2 text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
               {savingRates ? 'Zapisywanie...' : 'Zapisz stawki'}

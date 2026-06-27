@@ -5,6 +5,7 @@ export interface Tutor {
   phone: string | null
   unique_link: string
   hourly_rate: number | null
+  meet_link: string | null
   rate_individual: number | null
   rate_pair: number | null
   rate_group: number | null
@@ -49,6 +50,7 @@ export interface Lesson {
   amount_due: number | null
   reminder_sent: boolean
   room: string | null
+  location: string
   is_group: boolean
   tutor_amount: number | null
   lesson_type: string | null
