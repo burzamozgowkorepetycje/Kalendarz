@@ -22,7 +22,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [history, setHistory] = useState<Lesson[]>([])
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([])
-  const [form, setForm] = useState<{ name: string; email: string; phone: string; notes: string }>({ name: '', email: '', phone: '', notes: '' })
+  const [form, setForm] = useState<{ name: string; email: string; phone: string; notes: string; status: string }>({ name: '', email: '', phone: '', notes: '', status: 'potencjalny' })
   const [rates, setRates] = useState<Rates>(EMPTY_RATES)
   const [editRates, setEditRates] = useState<Rates>(EMPTY_RATES)
   const [savingRates, setSavingRates] = useState(false)
@@ -146,7 +146,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
     if (res.ok) {
       const s = await res.json()
       setStudents([s, ...students])
-      setForm({ name: '', email: '', phone: '', notes: '' })
+      setForm({ name: '', email: '', phone: '', notes: '', status: 'potencjalny' })
       setRates(EMPTY_RATES)
     }
     setLoading(false)
@@ -179,6 +179,13 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
           <input placeholder="Notatki" value={form.notes}
             onChange={e => setForm({ ...form, notes: e.target.value })}
             className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500" />
+          <div className="md:col-span-4">
+            <label className="block text-xs font-medium text-gray-500 mb-1">Status ucznia</label>
+            <select value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 focus:ring-2 focus:ring-blue-500 w-full md:w-48">
+              {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
           <div className="md:col-span-4">
             <p className="text-xs font-semibold text-gray-500 mb-1.5">Sugerowane stawki ucznia (kwota do zapłaty)</p>
             <RateInputs value={rates} onChange={setRates} />
