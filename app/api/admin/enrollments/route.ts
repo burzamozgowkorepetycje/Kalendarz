@@ -8,11 +8,13 @@ function verifyAdmin(req: NextRequest) {
 export async function GET(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data, error } = await supabaseAdmin
-    .from('students')
-    .select('*')
-    .order('name')
+  const { searchParams } = new URL(req.url)
+  const studentId = searchParams.get('student_id')
 
+  let query = supabaseAdmin.from('student_enrollments').select('*').order('created_at', { ascending: false })
+  if (studentId) query = query.eq('student_id', studentId)
+
+  const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
 }
@@ -21,22 +23,22 @@ export async function POST(req: NextRequest) {
   if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
-  if (!body.name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
+  if (!body.student_id || !body.subject) {
+    return NextResponse.json({ error: 'Missing student_id or subject' }, { status: 400 })
+  }
 
   const { data, error } = await supabaseAdmin
-    .from('students')
+    .from('student_enrollments')
     .insert({
-      name: body.name,
-      email: body.email || null,
-      phone: body.phone || null,
-      notes: body.notes || null,
-      birth_date: body.birth_date || null,
-      grade: body.grade || null,
+      student_id: body.student_id,
+      subject: body.subject,
+      mode: body.mode || 'individual',
       location: body.location || 'Wyszków',
-      status: body.status || 'potencjalny',
-      rate_individual: body.rate_individual ?? null,
-      rate_pair: body.rate_pair ?? null,
-      rate_group: body.rate_group ?? null,
+      duration_minutes: body.duration_minutes ?? 60,
+      group_name: body.mode === 'group' ? (body.group_name || null) : null,
+      is_maturzysta: body.is_maturzysta ?? false,
+      is_e8: body.is_e8 ?? false,
+      active: true,
     })
     .select()
     .single()
@@ -51,8 +53,16 @@ export async function PUT(req: NextRequest) {
   const { id, ...fields } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
+  // Jeśli oznaczamy jako nieaktywne (rezygnacja), zapisz datę
+  if (fields.active === false && !fields.cancelled_at) {
+    fields.cancelled_at = new Date().toISOString()
+  }
+  if (fields.active === true) {
+    fields.cancelled_at = null
+  }
+
   const { data, error } = await supabaseAdmin
-    .from('students')
+    .from('student_enrollments')
     .update(fields)
     .eq('id', id)
     .select()
@@ -68,7 +78,7 @@ export async function DELETE(req: NextRequest) {
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
-  const { error } = await supabaseAdmin.from('students').delete().eq('id', id)
+  const { error } = await supabaseAdmin.from('student_enrollments').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }

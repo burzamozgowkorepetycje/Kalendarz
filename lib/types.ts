@@ -27,12 +27,18 @@ export interface LessonStudent {
   students?: Pick<Student, 'name' | 'email' | 'phone'>
 }
 
+export type StudentStatus = 'potencjalny' | 'zapisany' | 'aktywny' | 'zawieszony' | 'zakończył'
+
 export interface Student {
   id: string
   name: string
   email: string | null
   phone: string | null
   notes: string | null
+  birth_date: string | null
+  grade: string | null
+  location: string | null
+  status: StudentStatus
   rate_individual: number | null
   rate_pair: number | null
   rate_group: number | null
@@ -72,6 +78,21 @@ export interface Lesson {
   // joins
   tutors?: Pick<Tutor, 'name' | 'email' | 'phone'>
   students?: Pick<Student, 'name' | 'email' | 'phone'>
+}
+
+export interface StudentEnrollment {
+  id: string
+  student_id: string
+  subject: string
+  mode: 'individual' | 'group'
+  location: 'Wyszków' | 'Online'
+  duration_minutes: number
+  group_name: string | null
+  is_maturzysta: boolean
+  is_e8: boolean
+  active: boolean
+  cancelled_at: string | null
+  created_at: string
 }
 
 export interface Payment {

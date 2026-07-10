@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Eye, EyeOff, Search, User, GraduationCap } from 'lucide-react'
+import DashboardTab from './tabs/DashboardTab'
 import TutorsTab from './tabs/TutorsTab'
 import StudentsTab from './tabs/StudentsTab'
 import AttendanceTab from './tabs/AttendanceTab'
@@ -12,6 +13,7 @@ import HistoryTab from './tabs/HistoryTab'
 import AttendanceReviewTab from './tabs/AttendanceReviewTab'
 
 const TABS = [
+  { id: 'dashboard', label: 'Dashboard' },
   { id: 'calendar', label: 'Kalendarz' },
   { id: 'tutors', label: 'Korepetytorzy' },
   { id: 'students', label: 'Uczniowie' },
@@ -190,6 +192,7 @@ export default function AdminPage() {
 
       {/* Content */}
       <main className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-8">
+        {activeTab === 'dashboard' && <DashboardTab password={password} />}
         {activeTab === 'calendar' && <CalendarTab password={password} />}
         {activeTab === 'tutors' && <TutorsTab password={password} />}
         {activeTab === 'students' && <StudentsTab password={password} focusStudentId={focusStudentId} />}

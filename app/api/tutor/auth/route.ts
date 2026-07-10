@@ -5,6 +5,35 @@ import jwt from 'jsonwebtoken'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tutor-secret-key-change-in-production'
 
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const link = searchParams.get('link')
+
+    if (!link) {
+      return NextResponse.json({ error: 'Brakuje linku' }, { status: 400 })
+    }
+
+    const { data: tutor, error } = await supabaseAdmin
+      .from('tutors')
+      .select('id, name, unique_link, active')
+      .eq('unique_link', link)
+      .single()
+
+    if (error || !tutor) {
+      return NextResponse.json({ error: 'Nieprawidłowy link' }, { status: 404 })
+    }
+
+    if (!tutor.active) {
+      return NextResponse.json({ error: 'Konto nieaktywne' }, { status: 403 })
+    }
+
+    return NextResponse.json({ name: tutor.name, id: tutor.id })
+  } catch {
+    return NextResponse.json({ error: 'Błąd serwera' }, { status: 500 })
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { login, password } = await req.json()
