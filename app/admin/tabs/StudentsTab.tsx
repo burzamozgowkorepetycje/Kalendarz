@@ -76,7 +76,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
     setSavingInfo(true)
     const res = await fetch('/api/admin/students', {
       method: 'PUT', headers,
-      body: JSON.stringify({ id: selectedStudent.id, ...infoForm }),
+      body: JSON.stringify({ id: selectedStudent.id, ...infoForm, birth_date: infoForm.birth_date || null }),
     })
     if (res.ok) {
       const updated = await res.json()

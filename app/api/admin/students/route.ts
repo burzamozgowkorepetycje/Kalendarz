@@ -51,6 +51,9 @@ export async function PUT(req: NextRequest) {
   const { id, ...fields } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
+  // Puste stringi dla pól typu DATE → null (Postgres nie przyjmuje "")
+  if (fields.birth_date === '') fields.birth_date = null
+
   const { data, error } = await supabaseAdmin
     .from('students')
     .update(fields)
