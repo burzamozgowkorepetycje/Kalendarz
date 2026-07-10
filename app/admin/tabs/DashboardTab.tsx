@@ -131,8 +131,9 @@ export default function DashboardTab({ password }: { password: string }) {
     // Zapisy na przedmioty (tylko aktywni uczniowie)
     const individualStudents = uniqueIds(activeEnrollments.filter(e => e.mode === 'individual'))
     const groupEnrollments = activeEnrollments.filter(e => e.mode === 'group').length
-    const maturzysci = uniqueIds(activeEnrollments.filter(e => e.is_maturzysta))
-    const e8 = uniqueIds(activeEnrollments.filter(e => e.is_e8))
+    // Maturzyści / E8 = kursy (zajęcia grupowe)
+    const maturzysci = uniqueIds(activeEnrollments.filter(e => e.is_maturzysta && e.mode === 'group'))
+    const e8 = uniqueIds(activeEnrollments.filter(e => e.is_e8 && e.mode === 'group'))
     // Rezygnacje: anulowane zapisy w tym miesiącu
     const resignationsThisMonth = enrollments.filter(e => e.cancelled_at?.startsWith(thisMonth)).length
 
@@ -272,9 +273,9 @@ export default function DashboardTab({ password }: { password: string }) {
             <StatCard icon={<Monitor size={20} className="text-cyan-400" />} label="Uczniowie online" value={schoolStats.onlineStudents} color="text-cyan-600" />
             <StatCard icon={<MapPin size={20} className="text-teal-400" />} label="Stacjonarni (Wyszków)" value={schoolStats.onsiteStudents} color="text-teal-600" />
             <StatCard icon={<GraduationCap size={20} className="text-amber-400" />} label="Maturzyści" value={schoolStats.maturzysci} color="text-amber-600"
-              onClick={() => setDetail({ title: 'Kursy maturalne wg przedmiotu', predicate: e => e.is_maturzysta })} />
+              onClick={() => setDetail({ title: 'Kursy maturalne wg przedmiotu', predicate: e => e.is_maturzysta && e.mode === 'group' })} />
             <StatCard icon={<ClipboardCheck size={20} className="text-pink-400" />} label="Przygotowanie do E8" value={schoolStats.e8} color="text-pink-600"
-              onClick={() => setDetail({ title: 'Egzamin ósmoklasisty wg przedmiotu', predicate: e => e.is_e8 })} />
+              onClick={() => setDetail({ title: 'Egzamin ósmoklasisty wg przedmiotu', predicate: e => e.is_e8 && e.mode === 'group' })} />
             <StatCard icon={<UserMinus size={20} className="text-red-400" />} label="Rezygnacje w tym miesiącu" value={schoolStats.resignationsThisMonth} color="text-red-600" />
           </div>
         </div>
