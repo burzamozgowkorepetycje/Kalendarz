@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Calendar, AlertCircle, TrendingUp, Users, RotateCw, UserCheck, UserPlus, Monitor, MapPin, GraduationCap, ClipboardCheck, UserMinus, UsersRound, Clock } from 'lucide-react'
+import { Calendar, AlertCircle, TrendingUp, Users, RotateCw, UserCheck, UserPlus, Monitor, MapPin, GraduationCap, ClipboardCheck, UserMinus, UsersRound, Clock, X } from 'lucide-react'
 import { Student, StudentEnrollment } from '@/lib/types'
 
 // Pojemność lokalu: 6 sal × 6h (14–20) × 5 dni (pon–pt) = 180 roboczogodzin/tydzień
@@ -68,6 +68,9 @@ export default function DashboardTab({ password }: { password: string }) {
   const [stats, setStats] = useState<DashboardStats | null>(null)
   const [schoolStats, setSchoolStats] = useState<SchoolStats | null>(null)
   const [loading, setLoading] = useState(false)
+  // Aktywne zapisy (tylko aktywni uczniowie) — do rozbicia po przedmiotach
+  const [activeEnr, setActiveEnr] = useState<StudentEnrollment[]>([])
+  const [detail, setDetail] = useState<{ title: string; predicate: (e: StudentEnrollment) => boolean } | null>(null)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
 
@@ -106,26 +109,31 @@ export default function DashboardTab({ password }: { password: string }) {
     const onlineGroupH = online.groupH
     const onlineTotalH = online.totalH
 
-    const activeEnrollments = enrollments.filter(e => e.active)
+    // Aktywni uczniowie (status = aktywny) — wszystkie statystyki oprócz "w bazie" liczą tylko ich
+    const activeStudentIds = new Set(students.filter(s => s.status === 'aktywny').map(s => s.id))
+    const activeStudents = students.filter(s => s.status === 'aktywny')
+    // Zapisy tylko aktywnych uczniów (i aktywne zapisy)
+    const activeEnrollments = enrollments.filter(e => e.active && activeStudentIds.has(e.student_id))
+    setActiveEnr(activeEnrollments)
     const uniqueIds = (list: StudentEnrollment[]) => new Set(list.map(e => e.student_id)).size
 
     const totalStudentsInDb = students.length
     const newThisMonth = students.filter(s => s.created_at?.startsWith(thisMonth)).length
-    // Status ucznia (karta ucznia) — źródło prawdy dla "aktywnych" i lokalizacji
-    const totalActiveStudents = students.filter(s => s.status === 'aktywny').length
-    const onlineStudents = students.filter(s => s.location === 'Online').length
-    const onsiteStudents = students.filter(s => s.location === 'Wyszków').length
+    const totalActiveStudents = activeStudents.length
+    // Online / stacjonarni — tylko aktywni uczniowie wg lokalizacji z karty
+    const onlineStudents = activeStudents.filter(s => s.location === 'Online').length
+    const onsiteStudents = activeStudents.filter(s => s.location === 'Wyszków').length
     const byStatus: Record<string, number> = {}
     for (const s of students) {
       const st = s.status || 'potencjalny'
       byStatus[st] = (byStatus[st] || 0) + 1
     }
-    // Zapisy na przedmioty — źródło dla trybu i profili egzaminacyjnych
+    // Zapisy na przedmioty (tylko aktywni uczniowie)
     const individualStudents = uniqueIds(activeEnrollments.filter(e => e.mode === 'individual'))
     const groupEnrollments = activeEnrollments.filter(e => e.mode === 'group').length
     const maturzysci = uniqueIds(activeEnrollments.filter(e => e.is_maturzysta))
     const e8 = uniqueIds(activeEnrollments.filter(e => e.is_e8))
-    // Rezygnacje: uczniowie ze statusem "zakończył" w tym miesiącu lub anulowane zapisy
+    // Rezygnacje: anulowane zapisy w tym miesiącu
     const resignationsThisMonth = enrollments.filter(e => e.cancelled_at?.startsWith(thisMonth)).length
 
     setSchoolStats({
@@ -257,13 +265,50 @@ export default function DashboardTab({ password }: { password: string }) {
             <StatCard icon={<UserCheck size={20} className="text-blue-400" />} label="Aktywnych uczniów" value={schoolStats.totalActiveStudents} color="text-blue-600" />
             <StatCard icon={<Users size={20} className="text-gray-400" />} label="Wszyscy w bazie" value={schoolStats.totalStudentsInDb} color="text-gray-700" />
             <StatCard icon={<UserPlus size={20} className="text-green-400" />} label="Nowi w tym miesiącu" value={schoolStats.newThisMonth} color="text-green-600" />
-            <StatCard icon={<Users size={20} className="text-indigo-400" />} label="Uczniowie indywidualni" value={schoolStats.individualStudents} color="text-indigo-600" />
-            <StatCard icon={<UsersRound size={20} className="text-purple-400" />} label="Zapisy grupowe" value={schoolStats.groupEnrollments} color="text-purple-600" />
+            <StatCard icon={<Users size={20} className="text-indigo-400" />} label="Uczniowie indywidualni" value={schoolStats.individualStudents} color="text-indigo-600"
+              onClick={() => setDetail({ title: 'Indywidualni wg przedmiotu', predicate: e => e.mode === 'individual' })} />
+            <StatCard icon={<UsersRound size={20} className="text-purple-400" />} label="Zapisy grupowe" value={schoolStats.groupEnrollments} color="text-purple-600"
+              onClick={() => setDetail({ title: 'Grupowe wg przedmiotu', predicate: e => e.mode === 'group' })} />
             <StatCard icon={<Monitor size={20} className="text-cyan-400" />} label="Uczniowie online" value={schoolStats.onlineStudents} color="text-cyan-600" />
             <StatCard icon={<MapPin size={20} className="text-teal-400" />} label="Stacjonarni (Wyszków)" value={schoolStats.onsiteStudents} color="text-teal-600" />
-            <StatCard icon={<GraduationCap size={20} className="text-amber-400" />} label="Maturzyści" value={schoolStats.maturzysci} color="text-amber-600" />
-            <StatCard icon={<ClipboardCheck size={20} className="text-pink-400" />} label="Przygotowanie do E8" value={schoolStats.e8} color="text-pink-600" />
+            <StatCard icon={<GraduationCap size={20} className="text-amber-400" />} label="Maturzyści" value={schoolStats.maturzysci} color="text-amber-600"
+              onClick={() => setDetail({ title: 'Kursy maturalne wg przedmiotu', predicate: e => e.is_maturzysta })} />
+            <StatCard icon={<ClipboardCheck size={20} className="text-pink-400" />} label="Przygotowanie do E8" value={schoolStats.e8} color="text-pink-600"
+              onClick={() => setDetail({ title: 'Egzamin ósmoklasisty wg przedmiotu', predicate: e => e.is_e8 })} />
             <StatCard icon={<UserMinus size={20} className="text-red-400" />} label="Rezygnacje w tym miesiącu" value={schoolStats.resignationsThisMonth} color="text-red-600" />
+          </div>
+        </div>
+      )}
+
+      {/* Modal rozbicia po przedmiotach */}
+      {detail && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setDetail(null)}>
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">{detail.title}</h3>
+              <button onClick={() => setDetail(null)} className="p-1 text-gray-400 hover:text-gray-600 rounded-lg hover:bg-gray-100"><X size={18} /></button>
+            </div>
+            <div className="overflow-y-auto divide-y divide-gray-100">
+              {(() => {
+                // Grupuj po przedmiocie, licz unikalnych uczniów
+                const matching = activeEnr.filter(detail.predicate)
+                const bySubject = new Map<string, Set<string>>()
+                for (const e of matching) {
+                  if (!bySubject.has(e.subject)) bySubject.set(e.subject, new Set())
+                  bySubject.get(e.subject)!.add(e.student_id)
+                }
+                const rows = Array.from(bySubject.entries())
+                  .map(([subject, ids]) => ({ subject, count: ids.size }))
+                  .sort((a, b) => b.count - a.count)
+                if (rows.length === 0) return <p className="px-5 py-8 text-center text-gray-400 text-sm">Brak zapisów</p>
+                return rows.map(r => (
+                  <div key={r.subject} className="px-5 py-3 flex items-center justify-between">
+                    <span className="text-sm text-gray-800">{r.subject}</span>
+                    <span className="text-sm font-semibold text-gray-900">{r.count} {r.count === 1 ? 'uczeń' : 'uczniów'}</span>
+                  </div>
+                ))
+              })()}
+            </div>
           </div>
         </div>
       )}
@@ -396,11 +441,15 @@ export default function DashboardTab({ password }: { password: string }) {
   )
 }
 
-function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label: string; value: number; color: string }) {
+function StatCard({ icon, label, value, color, onClick }: { icon: React.ReactNode; label: string; value: number; color: string; onClick?: () => void }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div
+      onClick={onClick}
+      className={`bg-white rounded-xl border border-gray-200 p-4 ${onClick ? 'cursor-pointer hover:border-blue-400 hover:shadow-sm transition' : ''}`}
+    >
       <div className="flex items-center justify-between mb-1">
         {icon}
+        {onClick && <span className="text-[10px] text-gray-300 font-medium">szczegóły ›</span>}
       </div>
       <p className={`text-xl font-bold ${color}`}>{value}</p>
       <p className="text-xs text-gray-500">{label}</p>
