@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
       level: body.level || null,
       is_maturzysta: body.is_maturzysta ?? false,
       is_e8: body.is_e8 ?? false,
+      price: body.price ?? null,
       active: true,
     })
     .select()

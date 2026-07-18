@@ -93,6 +93,7 @@ export interface StudentEnrollment {
   is_e8: boolean
   active: boolean
   cancelled_at: string | null
+  price: number | null
   created_at: string
 }
 
@@ -105,6 +106,8 @@ export interface CourseGroup {
   is_e8: boolean
   location: 'Wyszków' | 'Online'
   duration_minutes: number
+  tutor_rate_per_hour: number
+  student_price: number | null
   active: boolean
   created_at: string
 }

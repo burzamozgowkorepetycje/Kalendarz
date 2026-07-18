@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Trash2, BookOpen, Pencil, Check, X, GraduationCap } from 'lucide-react'
 import { Student, Lesson, StudentEnrollment, CourseGroup } from '@/lib/types'
 import RateInputs, { Rates, EMPTY_RATES, ratesToNumbers } from '@/app/components/RateInputs'
+import { defaultStudentPrice } from '@/lib/pricing'
 
 const SUBJECTS = ['Matematyka', 'Angielski', 'Polski', 'Hiszpański', 'Geografia', 'Biologia', 'Chemia', 'WOS']
 const LOCATIONS = ['Wyszków', 'Online']
@@ -35,9 +36,11 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
   const [savingInfo, setSavingInfo] = useState(false)
 
   // Nowy zapis na przedmiot
-  const [newEnrollment, setNewEnrollment] = useState({ subject: '', mode: 'individual' as 'individual' | 'group', location: 'Wyszków' as 'Wyszków' | 'Online', duration_minutes: 60, group_name: '', level: '' as '' | 'podstawowa' | 'rozszerzona', is_maturzysta: false, is_e8: false })
+  const [newEnrollment, setNewEnrollment] = useState({ subject: '', mode: 'individual' as 'individual' | 'group', location: 'Wyszków' as 'Wyszków' | 'Online', duration_minutes: 60, group_name: '', level: '' as '' | 'podstawowa' | 'rozszerzona', is_maturzysta: false, is_e8: false, price: '' })
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [editingGroupValue, setEditingGroupValue] = useState('')
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
+  const [editingPriceValue, setEditingPriceValue] = useState('')
   const [savingEnrollment, setSavingEnrollment] = useState(false)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
@@ -111,14 +114,26 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
     setSavingEnrollment(true)
     const res = await fetch('/api/admin/enrollments', {
       method: 'POST', headers,
-      body: JSON.stringify({ student_id: selectedStudent.id, ...newEnrollment }),
+      body: JSON.stringify({ student_id: selectedStudent.id, ...newEnrollment, price: newEnrollment.price ? Number(newEnrollment.price) : null }),
     })
     if (res.ok) {
       const created = await res.json()
       setEnrollments([created, ...enrollments])
-      setNewEnrollment({ subject: '', mode: 'individual', location: 'Wyszków', duration_minutes: 60, group_name: '', level: '', is_maturzysta: false, is_e8: false })
+      setNewEnrollment({ subject: '', mode: 'individual', location: 'Wyszków', duration_minutes: 60, group_name: '', level: '', is_maturzysta: false, is_e8: false, price: '' })
     }
     setSavingEnrollment(false)
+  }
+
+  const savePrice = async (id: string, price: string) => {
+    const res = await fetch('/api/admin/enrollments', {
+      method: 'PUT', headers,
+      body: JSON.stringify({ id, price: price ? Number(price) : null }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setEnrollments(enrollments.map(e => e.id === updated.id ? updated : e))
+      setEditingPriceId(null)
+    }
   }
 
   const toggleEnrollmentActive = async (enrollment: StudentEnrollment) => {
@@ -378,6 +393,19 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                               (rezygnacja: {new Date(en.cancelled_at).toLocaleDateString('pl-PL')})
                             </span>
                           )}
+                          {editingPriceId === en.id ? (
+                            <span className="inline-flex items-center gap-1 ml-2">
+                              <input autoFocus type="number" value={editingPriceValue} onChange={e => setEditingPriceValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') savePrice(en.id, editingPriceValue); if (e.key === 'Escape') setEditingPriceId(null) }}
+                                className="w-16 border border-gray-300 rounded px-1 py-0.5 text-xs text-gray-900" />
+                              <button onClick={() => savePrice(en.id, editingPriceValue)} className="text-xs text-blue-600 font-medium">Zapisz</button>
+                            </span>
+                          ) : (
+                            <button onClick={() => { setEditingPriceId(en.id); setEditingPriceValue(en.price != null ? String(en.price) : '') }}
+                              className="text-xs text-gray-500 ml-2 underline decoration-dotted hover:text-blue-600">
+                              {en.price != null ? `${en.price} zł` : 'cena?'}
+                            </button>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
                           {en.mode === 'group' && editingGroupId !== en.id && (
@@ -456,7 +484,8 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                         {matches.length > 0 && (
                           <div className="flex flex-wrap gap-1 mb-1.5">
                             {matches.map(g => (
-                              <button key={g.id} type="button" onClick={() => setNewEnrollment({ ...newEnrollment, group_name: g.name })}
+                              <button key={g.id} type="button"
+                                onClick={() => setNewEnrollment({ ...newEnrollment, group_name: g.name, price: String(g.student_price ?? defaultStudentPrice(g.duration_minutes)) })}
                                 className={`text-xs px-2 py-1 rounded-lg border ${newEnrollment.group_name === g.name ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
                                 {g.name}
                               </button>
@@ -465,6 +494,10 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                         )}
                         <input value={newEnrollment.group_name} onChange={e => setNewEnrollment({ ...newEnrollment, group_name: e.target.value })}
                           placeholder="Nazwa grupy (opcjonalnie — możesz przydzielić później)"
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400 mb-1.5" />
+                        <input type="number" value={newEnrollment.price}
+                          onChange={e => setNewEnrollment({ ...newEnrollment, price: e.target.value })}
+                          placeholder={`Cena ucznia za zajęcia (domyślnie ${defaultStudentPrice(newEnrollment.duration_minutes)} zł)`}
                           className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400" />
                       </div>
                     )

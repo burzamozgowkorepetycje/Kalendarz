@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { defaultStudentPrice, defaultTutorRatePerHour } from '@/lib/pricing'
 
 function verifyAdmin(req: NextRequest) {
   return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
@@ -35,6 +36,8 @@ export async function POST(req: NextRequest) {
       is_e8: body.is_e8 ?? false,
       location: body.location || 'Wyszków',
       duration_minutes: body.duration_minutes ?? 60,
+      tutor_rate_per_hour: body.tutor_rate_per_hour ?? defaultTutorRatePerHour(body.subject),
+      student_price: body.student_price ?? defaultStudentPrice(body.duration_minutes ?? 60),
       active: true,
     })
     .select()
