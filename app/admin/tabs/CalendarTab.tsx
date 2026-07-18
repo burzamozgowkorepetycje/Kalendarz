@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, X, Plus, RefreshCw, Users, User, Trash2, CalendarDays, Calendar, Search, Video, MapPin, Send } from 'lucide-react'
-import { Tutor, Student, Lesson, LessonStudent } from '@/lib/types'
+import { Tutor, Student, Lesson, LessonStudent, CourseGroup, StudentEnrollment } from '@/lib/types'
 import Combobox from '@/app/components/Combobox'
 
 const ROOMS = ['Sala 1', 'Sala 2', 'Sala 3', 'Sala 4', 'Sala 5', 'Sala 6']
@@ -56,6 +56,9 @@ export default function CalendarTab({ password }: { password: string }) {
   const [conflictModal, setConflictModal] = useState<{ kind: 'conflict' | 'warning'; messages: string[] } | null>(null)
   const [ownerPwd, setOwnerPwd] = useState('')
   const [ownerPwdError, setOwnerPwdError] = useState(false)
+  const [courseGroups, setCourseGroups] = useState<CourseGroup[]>([])
+  const [allEnrollments, setAllEnrollments] = useState<StudentEnrollment[]>([])
+  const [selectedCourseGroupId, setSelectedCourseGroupId] = useState('')
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
   const dateStr = toDateStr(currentDate)
@@ -72,6 +75,8 @@ export default function CalendarTab({ password }: { password: string }) {
     fetch('/api/admin/tutors', { headers }).then(r => r.json()).then(setTutors)
     fetch('/api/admin/students', { headers }).then(r => r.json()).then(setStudents)
     fetch('/api/admin/tutor-availability', { headers }).then(r => r.json()).then(d => setAvailAll(Array.isArray(d) ? d : []))
+    fetch('/api/admin/course-groups', { headers }).then(r => r.ok ? r.json() : []).then(d => setCourseGroups(Array.isArray(d) ? d.filter(g => g.active) : []))
+    fetch('/api/admin/enrollments', { headers }).then(r => r.ok ? r.json() : []).then(d => setAllEnrollments(Array.isArray(d) ? d : []))
   }, [])
 
   useEffect(() => { loadLessons() }, [dateStr, view, location])
@@ -100,6 +105,7 @@ export default function CalendarTab({ password }: { password: string }) {
     lessons.filter(l => l.date === date && sameHourBucket(l.start_time, hour))
 
   const loadModalForm = async (existing?: Lesson) => {
+    setSelectedCourseGroupId('')
     if (existing) {
       setForm({
         tutor_id: existing.tutor_id || '',
@@ -897,6 +903,43 @@ export default function CalendarTab({ password }: { password: string }) {
                       className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:ring-2 focus:ring-blue-500" />
                   </div>
                 </>
+              )}
+
+              {/* Wybór zdefiniowanej grupy — uzupełnia przedmiot, czas trwania i uczniów zapisanych do tej grupy */}
+              {form.is_group && courseGroups.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Zdefiniowana grupa (opcjonalnie)</label>
+                  <select value={selectedCourseGroupId} onChange={e => {
+                    const gid = e.target.value
+                    setSelectedCourseGroupId(gid)
+                    const g = courseGroups.find(x => x.id === gid)
+                    if (!g) return
+                    setForm(f => ({
+                      ...f, subject: g.subject, duration_minutes: String(g.duration_minutes),
+                      lesson_type: g.is_maturzysta ? 'Kursy maturalne' : 'Zajęcia grupowe',
+                    }))
+                    const memberIds = allEnrollments
+                      .filter(en => en.active && en.mode === 'group' && en.group_name?.trim() === g.name)
+                      .map(en => en.student_id)
+                    const enrolledStudentIds = new Set(
+                      students.filter(s => memberIds.includes(s.id) && ['zapisany', 'aktywny'].includes(s.status || 'potencjalny')).map(s => s.id)
+                    )
+                    if (enrolledStudentIds.size > 0) {
+                      setGroupEntries(Array.from(enrolledStudentIds).map(sid => {
+                        const s = students.find(x => x.id === sid)
+                        return { student_id: sid, amount_due: rateFor(s, 'group') }
+                      }))
+                    }
+                  }}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 mb-3">
+                    <option value="">— wybierz grupę, żeby uzupełnić dane —</option>
+                    {courseGroups.map(g => (
+                      <option key={g.id} value={g.id}>
+                        {g.name} ({g.subject}{g.level ? ` ${g.level}` : ''}{g.is_e8 ? ' E8' : ''})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               )}
 
               {/* Group students */}

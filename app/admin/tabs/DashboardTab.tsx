@@ -76,6 +76,8 @@ export default function DashboardTab({ password }: { password: string }) {
   const [studentNames, setStudentNames] = useState<Record<string, string>>({})
   const [studentStatuses, setStudentStatuses] = useState<Record<string, string>>({})
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null)
+  const [showGroupsPanel, setShowGroupsPanel] = useState(false)
+  const [showSignupsPanel, setShowSignupsPanel] = useState(false)
   // Zdefiniowane grupy — rezerwują miejsce w grafiku niezależnie od liczby przypisanych uczniów
   const [courseGroups, setCourseGroups] = useState<CourseGroup[]>([])
   const [showGroupForm, setShowGroupForm] = useState(false)
@@ -293,8 +295,18 @@ export default function DashboardTab({ password }: { password: string }) {
 
           {/* Zdefiniowane grupy — rezerwują miejsce niezależnie od liczby przypisanych uczniów */}
           <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-sm font-semibold text-gray-700">Zdefiniowane grupy</p>
+            <button onClick={() => setShowGroupsPanel(!showGroupsPanel)} className="w-full flex items-center justify-between mb-1">
+              <p className="text-sm font-semibold text-gray-700">
+                Zdefiniowane grupy <span className="text-gray-400 font-normal">({courseGroups.filter(g => g.active).length})</span>
+              </p>
+              <span className="text-gray-300 text-xs">{showGroupsPanel ? '▲ zwiń' : '▼ rozwiń'}</span>
+            </button>
+            {!showGroupsPanel && schoolStats.fillGroupH > 0 && (
+              <p className="text-xs text-gray-500">Grupowe: {schoolStats.fillGroupH.toFixed(1)} h zarezerwowane w lokalu</p>
+            )}
+            {showGroupsPanel && (
+            <>
+            <div className="flex items-center justify-end mb-1">
               <button onClick={() => setShowGroupForm(!showGroupForm)}
                 className="text-xs px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100">
                 {showGroupForm ? 'Anuluj' : '+ Nowa grupa'}
@@ -373,6 +385,8 @@ export default function DashboardTab({ password }: { password: string }) {
                 })}
               </div>
             )}
+            </>
+            )}
           </div>
 
           {/* Godziny online (bez limitu pojemności) */}
@@ -390,7 +404,12 @@ export default function DashboardTab({ password }: { password: string }) {
           {/* Kursy grupowe — status zapisów (przed ustaleniem harmonogramu) */}
           {groupSignups.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
-              <p className="text-sm font-semibold text-gray-700 mb-1">Kursy grupowe — status zapisów</p>
+              <button onClick={() => setShowSignupsPanel(!showSignupsPanel)} className="w-full flex items-center justify-between mb-1">
+                <p className="text-sm font-semibold text-gray-700">Kursy grupowe — status zapisów</p>
+                <span className="text-gray-300 text-xs">{showSignupsPanel ? '▲ zwiń' : '▼ rozwiń'}</span>
+              </button>
+              {showSignupsPanel && (
+              <>
               <p className="text-xs text-gray-400 mb-3">
                 Liczba przy przedmiocie to <strong>zapisani</strong> (status: zapisany / aktywny) — to oni realnie się liczą.
                 Potencjalni (samo zainteresowanie, jeszcze nie zapisani) są pokazani osobno i nie wliczają się do statystyk.
@@ -467,6 +486,8 @@ export default function DashboardTab({ password }: { password: string }) {
                   </div>
                 )
               })()}
+              </>
+              )}
             </div>
           )}
 

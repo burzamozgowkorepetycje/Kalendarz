@@ -132,6 +132,15 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
     }
   }
 
+  // Grupy pasujące do przedmiotu/poziomu/typu egzaminu — żeby nie proponować np. angielskiego przy matematyce
+  const matchingGroups = (subject: string, level: string, is_maturzysta: boolean, is_e8: boolean) =>
+    courseGroups.filter(g =>
+      g.subject === subject &&
+      g.is_maturzysta === is_maturzysta &&
+      g.is_e8 === is_e8 &&
+      (!is_maturzysta || !level || g.level === level)
+    )
+
   const deleteEnrollment = async (id: string) => {
     if (!confirm('Usunąć ten zapis?')) return
     const res = await fetch(`/api/admin/enrollments?id=${id}`, { method: 'DELETE', headers })
@@ -386,11 +395,26 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                           </button>
                         </div>
                         </div>
-                        {editingGroupId === en.id && (
-                          <div className="flex items-center gap-2 mt-2">
+                        {editingGroupId === en.id && (() => {
+                          const matches = matchingGroups(en.subject, en.level || '', en.is_maturzysta, en.is_e8)
+                          return (
+                          <div className="mt-2">
+                            {matches.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mb-1.5">
+                                {matches.map(g => (
+                                  <button key={g.id} onClick={() => setEditingGroupValue(g.name)}
+                                    className={`text-xs px-2 py-1 rounded-lg border ${editingGroupValue === g.name ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
+                                    {g.name}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {matches.length === 0 && (
+                              <p className="text-xs text-amber-600 mb-1.5">Brak zdefiniowanych grup dla: {en.subject}{en.level ? ` (${en.level})` : ''}. Utwórz ją na Dashboardzie albo wpisz nazwę ręcznie.</p>
+                            )}
+                          <div className="flex items-center gap-2">
                             <input autoFocus value={editingGroupValue} onChange={e => setEditingGroupValue(e.target.value)}
-                              placeholder="Nazwa grupy (wybierz z listy lub wpisz nową)"
-                              list="course-group-names"
+                              placeholder="Nazwa grupy (wybierz powyżej lub wpisz nową)"
                               onKeyDown={e => { if (e.key === 'Enter') saveEnrollmentGroup(en.id, editingGroupValue); if (e.key === 'Escape') setEditingGroupId(null) }}
                               className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm text-gray-900" />
                             <button onClick={() => saveEnrollmentGroup(en.id, editingGroupValue)}
@@ -398,7 +422,9 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                             <button onClick={() => setEditingGroupId(null)}
                               className="px-2 py-1 bg-gray-200 text-gray-700 rounded-lg text-xs hover:bg-gray-300">Anuluj</button>
                           </div>
-                        )}
+                          </div>
+                          )
+                        })()}
                       </div>
                     ))}
                   </div>
@@ -423,15 +449,26 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                     className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900">
                     {DURATIONS.map(d => <option key={d} value={d}>{d} min</option>)}
                   </select>
-                  {newEnrollment.mode === 'group' && (
-                    <input value={newEnrollment.group_name} onChange={e => setNewEnrollment({ ...newEnrollment, group_name: e.target.value })}
-                      placeholder="Nazwa grupy (opcjonalnie — możesz przydzielić później)"
-                      list="course-group-names"
-                      className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400" />
-                  )}
-                  <datalist id="course-group-names">
-                    {courseGroups.map(g => <option key={g.id} value={g.name} />)}
-                  </datalist>
+                  {newEnrollment.mode === 'group' && newEnrollment.subject && (() => {
+                    const matches = matchingGroups(newEnrollment.subject, newEnrollment.level, newEnrollment.is_maturzysta, newEnrollment.is_e8)
+                    return (
+                      <div className="col-span-2">
+                        {matches.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mb-1.5">
+                            {matches.map(g => (
+                              <button key={g.id} type="button" onClick={() => setNewEnrollment({ ...newEnrollment, group_name: g.name })}
+                                className={`text-xs px-2 py-1 rounded-lg border ${newEnrollment.group_name === g.name ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'}`}>
+                                {g.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        <input value={newEnrollment.group_name} onChange={e => setNewEnrollment({ ...newEnrollment, group_name: e.target.value })}
+                          placeholder="Nazwa grupy (opcjonalnie — możesz przydzielić później)"
+                          className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400" />
+                      </div>
+                    )
+                  })()}
                   <div className="flex items-center gap-3 text-xs text-gray-600 col-span-2">
                     <label className="flex items-center gap-1">
                       <input type="checkbox" checked={newEnrollment.is_maturzysta}
