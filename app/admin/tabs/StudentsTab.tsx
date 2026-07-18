@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Plus, Trash2, BookOpen, Pencil, Check, X, GraduationCap } from 'lucide-react'
-import { Student, Lesson, StudentEnrollment } from '@/lib/types'
+import { Student, Lesson, StudentEnrollment, CourseGroup } from '@/lib/types'
 import RateInputs, { Rates, EMPTY_RATES, ratesToNumbers } from '@/app/components/RateInputs'
 
 const SUBJECTS = ['Matematyka', 'Angielski', 'Polski', 'Hiszpański', 'Geografia', 'Biologia', 'Chemia', 'WOS']
@@ -19,6 +19,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function StudentsTab({ password, focusStudentId }: { password: string; focusStudentId?: string | null }) {
   const [students, setStudents] = useState<Student[]>([])
+  const [courseGroups, setCourseGroups] = useState<CourseGroup[]>([])
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [history, setHistory] = useState<Lesson[]>([])
   const [enrollments, setEnrollments] = useState<StudentEnrollment[]>([])
@@ -43,6 +44,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
 
   useEffect(() => {
     fetch('/api/admin/students', { headers }).then(r => r.json()).then(setStudents)
+    fetch('/api/admin/course-groups', { headers }).then(r => r.json()).then(d => setCourseGroups(Array.isArray(d) ? d.filter(g => g.active) : []))
   }, [])
 
   // Wybór ucznia z wyszukiwarki globalnej
@@ -387,7 +389,8 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                         {editingGroupId === en.id && (
                           <div className="flex items-center gap-2 mt-2">
                             <input autoFocus value={editingGroupValue} onChange={e => setEditingGroupValue(e.target.value)}
-                              placeholder="Nazwa grupy (np. Matura MAT A)"
+                              placeholder="Nazwa grupy (wybierz z listy lub wpisz nową)"
+                              list="course-group-names"
                               onKeyDown={e => { if (e.key === 'Enter') saveEnrollmentGroup(en.id, editingGroupValue); if (e.key === 'Escape') setEditingGroupId(null) }}
                               className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm text-gray-900" />
                             <button onClick={() => saveEnrollmentGroup(en.id, editingGroupValue)}
@@ -423,8 +426,12 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                   {newEnrollment.mode === 'group' && (
                     <input value={newEnrollment.group_name} onChange={e => setNewEnrollment({ ...newEnrollment, group_name: e.target.value })}
                       placeholder="Nazwa grupy (opcjonalnie — możesz przydzielić później)"
+                      list="course-group-names"
                       className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400" />
                   )}
+                  <datalist id="course-group-names">
+                    {courseGroups.map(g => <option key={g.id} value={g.name} />)}
+                  </datalist>
                   <div className="flex items-center gap-3 text-xs text-gray-600 col-span-2">
                     <label className="flex items-center gap-1">
                       <input type="checkbox" checked={newEnrollment.is_maturzysta}

@@ -96,6 +96,19 @@ export interface StudentEnrollment {
   created_at: string
 }
 
+export interface CourseGroup {
+  id: string
+  name: string
+  subject: string
+  level: 'podstawowa' | 'rozszerzona' | null
+  is_maturzysta: boolean
+  is_e8: boolean
+  location: 'Wyszków' | 'Online'
+  duration_minutes: number
+  active: boolean
+  created_at: string
+}
+
 export interface Payment {
   id: string
   student_id: string

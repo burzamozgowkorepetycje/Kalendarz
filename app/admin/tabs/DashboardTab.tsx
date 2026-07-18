@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Calendar, AlertCircle, TrendingUp, Users, RotateCw, UserCheck, UserPlus, Monitor, MapPin, GraduationCap, ClipboardCheck, UserMinus, UsersRound, Clock, X } from 'lucide-react'
-import { Student, StudentEnrollment } from '@/lib/types'
+import { Student, StudentEnrollment, CourseGroup } from '@/lib/types'
 
 // Pojemność lokalu: 6 sal × 6h (14–20) × 5 dni (pon–pt) = 180 roboczogodzin/tydzień
 const VENUE_CAPACITY_H = 6 * 6 * 5
@@ -74,7 +74,16 @@ export default function DashboardTab({ password }: { password: string }) {
   // Wszystkie aktywne zapisy grupowe (niezależnie od statusu ucznia) — śledzenie zgłoszeń na kursy przed harmonogramem
   const [groupSignups, setGroupSignups] = useState<StudentEnrollment[]>([])
   const [studentNames, setStudentNames] = useState<Record<string, string>>({})
+  const [studentStatuses, setStudentStatuses] = useState<Record<string, string>>({})
   const [expandedCourse, setExpandedCourse] = useState<string | null>(null)
+  // Zdefiniowane grupy — rezerwują miejsce w grafiku niezależnie od liczby przypisanych uczniów
+  const [courseGroups, setCourseGroups] = useState<CourseGroup[]>([])
+  const [showGroupForm, setShowGroupForm] = useState(false)
+  const [savingGroup, setSavingGroup] = useState(false)
+  const [newGroup, setNewGroup] = useState({
+    name: '', subject: '', location: 'Wyszków' as 'Wyszków' | 'Online', duration_minutes: 60,
+    is_maturzysta: false, is_e8: false, level: '' as '' | 'podstawowa' | 'rozszerzona',
+  })
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
 
@@ -88,22 +97,21 @@ export default function DashboardTab({ password }: { password: string }) {
     const enrollmentsRes = await fetch('/api/admin/enrollments', { headers })
     const enrollments: StudentEnrollment[] = enrollmentsRes.ok ? await enrollmentsRes.json() : []
 
-    // Wypełnienie z zapisów uczniów (aktywne).
-    // Indywidualne: każdy zapis = jego długość. Grupowe: jedna grupa = jedna sala/godzina.
+    const groupsRes = await fetch('/api/admin/course-groups', { headers })
+    const groups: CourseGroup[] = groupsRes.ok ? await groupsRes.json() : []
+    setCourseGroups(groups)
+
+    // Wypełnienie: indywidualne zapisy liczą się wprost z zapisów uczniów.
+    // Grupowe: liczą się WYŁĄCZNIE zdefiniowane grupy (course_groups) — grupa
+    // rezerwuje miejsce sama w sobie, niezależnie od liczby przypisanych uczniów.
+    // Zapisy grupowe bez przydziału (oczekujący) NIE zajmują dodatkowego miejsca.
     const fillFor = (loc: 'Wyszków' | 'Online') => {
-      const list = enrollments.filter(e => e.active && e.location === loc)
-      const individualH = list
-        .filter(e => e.mode === 'individual')
+      const individualH = enrollments
+        .filter(e => e.active && e.location === loc && e.mode === 'individual')
         .reduce((s, e) => s + (e.duration_minutes || 60), 0) / 60
-      // Oczekujący na przydział (brak nazwy grupy) NIE zajmują miejsca — dopiero
-      // przydzielona, nazwana grupa liczy się jako jedna sala/godzina.
-      const groupBuckets = new Map<string, number>()
-      for (const e of list.filter(e => e.mode === 'group')) {
-        const key = e.group_name?.trim()
-        if (!key) continue
-        groupBuckets.set(key, Math.max(groupBuckets.get(key) || 0, e.duration_minutes || 60))
-      }
-      const groupH = Array.from(groupBuckets.values()).reduce((s, m) => s + m, 0) / 60
+      const groupH = groups
+        .filter(g => g.active && g.location === loc)
+        .reduce((s, g) => s + (g.duration_minutes || 60), 0) / 60
       return { individualH, groupH, totalH: individualH + groupH }
     }
     const venue = fillFor('Wyszków')
@@ -124,9 +132,11 @@ export default function DashboardTab({ password }: { password: string }) {
     setActiveEnr(activeEnrollments)
     const uniqueIds = (list: StudentEnrollment[]) => new Set(list.map(e => e.student_id)).size
 
-    // Wszystkie aktywne zapisy grupowe — niezależnie od statusu ucznia (śledzenie zgłoszeń na kursy)
+    // Wszystkie aktywne zapisy grupowe — niezależnie od statusu ucznia (śledzenie zgłoszeń na kursy),
+    // ale UI musi wyraźnie rozdzielać zapisanych (zobowiązanie) od potencjalnych (samo zainteresowanie)
     setGroupSignups(enrollments.filter(e => e.active && e.mode === 'group'))
     setStudentNames(Object.fromEntries(students.map(s => [s.id, s.name])))
+    setStudentStatuses(Object.fromEntries(students.map(s => [s.id, s.status || 'potencjalny'])))
 
     const totalStudentsInDb = students.length
     const newThisMonth = students.filter(s => s.created_at?.startsWith(thisMonth)).length
@@ -154,6 +164,26 @@ export default function DashboardTab({ password }: { password: string }) {
       byStatus, fillIndividualH, fillGroupH, fillTotalH, fillPercent,
       onlineIndividualH, onlineGroupH, onlineTotalH,
     })
+  }
+
+  const addCourseGroup = async () => {
+    if (!newGroup.name.trim() || !newGroup.subject) return
+    setSavingGroup(true)
+    const res = await fetch('/api/admin/course-groups', {
+      method: 'POST', headers,
+      body: JSON.stringify({ ...newGroup, level: newGroup.level || null }),
+    })
+    if (res.ok) {
+      setNewGroup({ name: '', subject: '', location: 'Wyszków', duration_minutes: 60, is_maturzysta: false, is_e8: false, level: '' })
+      await loadSchoolStats()
+    }
+    setSavingGroup(false)
+  }
+
+  const deactivateCourseGroup = async (id: string) => {
+    if (!confirm('Usunąć tę grupę? Przestanie zajmować miejsce w grafiku.')) return
+    const res = await fetch(`/api/admin/course-groups?id=${id}`, { method: 'DELETE', headers })
+    if (res.ok) await loadSchoolStats()
   }
 
   const loadDashboard = async () => {
@@ -261,6 +291,90 @@ export default function DashboardTab({ password }: { password: string }) {
             </div>
           </div>
 
+          {/* Zdefiniowane grupy — rezerwują miejsce niezależnie od liczby przypisanych uczniów */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-sm font-semibold text-gray-700">Zdefiniowane grupy</p>
+              <button onClick={() => setShowGroupForm(!showGroupForm)}
+                className="text-xs px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg font-medium hover:bg-blue-100">
+                {showGroupForm ? 'Anuluj' : '+ Nowa grupa'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-400 mb-3">Grupa zajmuje miejsce w grafiku od razu po utworzeniu — niezależnie od tego, ilu uczniów jest do niej przypisanych. Zapisy bez przydziału (lista oczekujących) nie zajmują dodatkowego miejsca.</p>
+
+            {showGroupForm && (
+              <div className="grid grid-cols-2 gap-2 mb-3 p-3 bg-gray-50 rounded-lg">
+                <input value={newGroup.name} onChange={e => setNewGroup({ ...newGroup, name: e.target.value })}
+                  placeholder="Nazwa grupy (np. Matura R - Matematyka - gr. 1)"
+                  className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400" />
+                <select value={newGroup.subject} onChange={e => setNewGroup({ ...newGroup, subject: e.target.value })}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900">
+                  <option value="">Przedmiot...</option>
+                  {['Matematyka', 'Angielski', 'Polski', 'Hiszpański', 'Geografia', 'Biologia', 'Chemia', 'WOS', 'Niemiecki'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+                <select value={newGroup.location} onChange={e => setNewGroup({ ...newGroup, location: e.target.value as 'Wyszków' | 'Online' })}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900">
+                  <option value="Wyszków">Wyszków</option>
+                  <option value="Online">Online</option>
+                </select>
+                <select value={newGroup.duration_minutes} onChange={e => setNewGroup({ ...newGroup, duration_minutes: Number(e.target.value) })}
+                  className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900">
+                  {[30, 60, 90, 120].map(d => <option key={d} value={d}>{d} min</option>)}
+                </select>
+                <div className="flex items-center gap-3 text-xs text-gray-600">
+                  <label className="flex items-center gap-1">
+                    <input type="checkbox" checked={newGroup.is_maturzysta}
+                      onChange={e => setNewGroup({ ...newGroup, is_maturzysta: e.target.checked, level: e.target.checked ? newGroup.level : '' })} />
+                    Maturzysta
+                  </label>
+                  <label className="flex items-center gap-1">
+                    <input type="checkbox" checked={newGroup.is_e8}
+                      onChange={e => setNewGroup({ ...newGroup, is_e8: e.target.checked })} />
+                    E8
+                  </label>
+                </div>
+                {newGroup.is_maturzysta && (
+                  <select value={newGroup.level} onChange={e => setNewGroup({ ...newGroup, level: e.target.value as '' | 'podstawowa' | 'rozszerzona' })}
+                    className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900">
+                    <option value="">Poziom (nieokreślony)</option>
+                    <option value="podstawowa">Podstawowa</option>
+                    <option value="rozszerzona">Rozszerzona</option>
+                  </select>
+                )}
+                <button onClick={addCourseGroup} disabled={savingGroup || !newGroup.name.trim() || !newGroup.subject}
+                  className="col-span-2 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50">
+                  {savingGroup ? 'Zapisywanie...' : '+ Utwórz grupę'}
+                </button>
+              </div>
+            )}
+
+            {courseGroups.filter(g => g.active).length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">Brak zdefiniowanych grup</p>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {courseGroups.filter(g => g.active).map(g => {
+                  const memberCount = groupSignups.filter(e =>
+                    e.group_name?.trim() === g.name && ['zapisany', 'aktywny'].includes(studentStatuses[e.student_id] || 'potencjalny')
+                  ).length
+                  return (
+                    <div key={g.id} className="py-2 flex items-center justify-between text-sm">
+                      <div>
+                        <p className="font-medium text-gray-800">{g.name}</p>
+                        <p className="text-xs text-gray-500">
+                          {g.subject}{g.level ? ` (${g.level})` : ''} · {g.location} · {g.duration_minutes} min
+                          {g.is_maturzysta && ' · maturzysta'}{g.is_e8 && ' · E8'} · {memberCount} {memberCount === 1 ? 'uczeń' : 'uczniów'}
+                        </p>
+                      </div>
+                      <button onClick={() => deactivateCourseGroup(g.id)} className="p-1.5 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
           {/* Godziny online (bez limitu pojemności) */}
           <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
             <div className="flex items-center justify-between mb-3">
@@ -277,35 +391,54 @@ export default function DashboardTab({ password }: { password: string }) {
           {groupSignups.length > 0 && (
             <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
               <p className="text-sm font-semibold text-gray-700 mb-1">Kursy grupowe — status zapisów</p>
-              <p className="text-xs text-gray-400 mb-3">Wszystkie zgłoszenia na zajęcia grupowe, niezależnie od statusu ucznia — również te bez ustalonego jeszcze terminu.</p>
+              <p className="text-xs text-gray-400 mb-3">
+                Liczba przy przedmiocie to <strong>zapisani</strong> (status: zapisany / aktywny) — to oni realnie się liczą.
+                Potencjalni (samo zainteresowanie, jeszcze nie zapisani) są pokazani osobno i nie wliczają się do statystyk.
+              </p>
               {(() => {
-                // Grupuj po przedmiocie + poziomie (podstawowa/rozszerzona nie mieszają się) → dalej po nazwie grupy (lub "oczekujący")
+                const isEnrolled = (sid: string) => ['zapisany', 'aktywny'].includes(studentStatuses[sid] || 'potencjalny')
+                const isProspect = (sid: string) => (studentStatuses[sid] || 'potencjalny') === 'potencjalny'
+
+                // Grupuj po przedmiocie + poziomie → dalej po nazwie grupy (lub "oczekujący"), tylko wśród ZAPISANYCH
                 type Row = { name: string; ids: Set<string> }
                 const subjectKey = (e: StudentEnrollment) => e.subject + (e.level ? ` (${e.level})` : '')
                 const bySubject = new Map<string, Map<string, Row>>()
+                const prospectsBySubject = new Map<string, Set<string>>()
                 for (const e of groupSignups) {
                   const sk = subjectKey(e)
-                  if (!bySubject.has(sk)) bySubject.set(sk, new Map())
-                  const groups = bySubject.get(sk)!
-                  const key = e.group_name?.trim() || '__waiting'
-                  if (!groups.has(key)) groups.set(key, { name: e.group_name?.trim() || 'Oczekujący na przydział', ids: new Set() })
-                  groups.get(key)!.ids.add(e.student_id)
+                  if (isEnrolled(e.student_id)) {
+                    if (!bySubject.has(sk)) bySubject.set(sk, new Map())
+                    const groups = bySubject.get(sk)!
+                    const key = e.group_name?.trim() || '__waiting'
+                    if (!groups.has(key)) groups.set(key, { name: e.group_name?.trim() || 'Oczekujący na przydział', ids: new Set() })
+                    groups.get(key)!.ids.add(e.student_id)
+                  } else if (isProspect(e.student_id)) {
+                    if (!prospectsBySubject.has(sk)) prospectsBySubject.set(sk, new Set())
+                    prospectsBySubject.get(sk)!.add(e.student_id)
+                  }
                 }
-                const subjects = Array.from(bySubject.entries())
-                  .map(([subject, groups]) => {
+                const allSubjectKeys = new Set([...bySubject.keys(), ...prospectsBySubject.keys()])
+                const subjects = Array.from(allSubjectKeys)
+                  .map(subject => {
+                    const groups = bySubject.get(subject) || new Map<string, Row>()
                     const groupRows = Array.from(groups.entries())
-                    const total = new Set(groupRows.flatMap(([, r]) => Array.from(r.ids))).size
-                    return { subject, total, groupRows }
+                    const enrolledTotal = new Set(groupRows.flatMap(([, r]) => Array.from(r.ids))).size
+                    const prospectIds = Array.from(prospectsBySubject.get(subject) || [])
+                    return { subject, enrolledTotal, groupRows, prospectIds }
                   })
-                  .sort((a, b) => b.total - a.total)
+                  .sort((a, b) => b.enrolledTotal - a.enrolledTotal)
                 return (
                   <div className="divide-y divide-gray-100">
-                    {subjects.map(({ subject, total, groupRows }) => (
+                    {subjects.map(({ subject, enrolledTotal, groupRows, prospectIds }) => (
                       <div key={subject} className="py-2">
                         <button onClick={() => setExpandedCourse(expandedCourse === subject ? null : subject)}
                           className="w-full flex items-center justify-between text-sm hover:bg-gray-50 rounded-lg px-2 py-1.5 -mx-2">
                           <span className="font-medium text-gray-800">{subject}</span>
-                          <span className="text-gray-500">{total} {total === 1 ? 'zapis' : 'zapisów'} <span className="text-gray-300">{expandedCourse === subject ? '▲' : '▼'}</span></span>
+                          <span className="text-gray-500">
+                            <strong className="text-gray-900">{enrolledTotal}</strong> {enrolledTotal === 1 ? 'zapisany' : 'zapisanych'}
+                            {prospectIds.length > 0 && <span className="text-gray-400"> · {prospectIds.length} potencjalnych</span>}
+                            {' '}<span className="text-gray-300">{expandedCourse === subject ? '▲' : '▼'}</span>
+                          </span>
                         </button>
                         {expandedCourse === subject && (
                           <div className="mt-1 ml-2 space-y-1.5">
@@ -321,6 +454,12 @@ export default function DashboardTab({ password }: { password: string }) {
                                   </p>
                                 </div>
                               ))}
+                            {prospectIds.length > 0 && (
+                              <div className="px-3 py-2 rounded-lg text-xs bg-gray-50 border border-dashed border-gray-200">
+                                <p className="font-medium mb-1 text-gray-500">💭 Potencjalni — nie liczą się jako zapisy ({prospectIds.length})</p>
+                                <p className="text-gray-500">{prospectIds.map(id => studentNames[id] || '—').join(', ')}</p>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
