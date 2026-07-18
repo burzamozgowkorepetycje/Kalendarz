@@ -95,9 +95,12 @@ export default function DashboardTab({ password }: { password: string }) {
       const individualH = list
         .filter(e => e.mode === 'individual')
         .reduce((s, e) => s + (e.duration_minutes || 60), 0) / 60
+      // Oczekujący na przydział (brak nazwy grupy) NIE zajmują miejsca — dopiero
+      // przydzielona, nazwana grupa liczy się jako jedna sala/godzina.
       const groupBuckets = new Map<string, number>()
       for (const e of list.filter(e => e.mode === 'group')) {
-        const key = e.group_name?.trim() || `__${e.id}`
+        const key = e.group_name?.trim()
+        if (!key) continue
         groupBuckets.set(key, Math.max(groupBuckets.get(key) || 0, e.duration_minutes || 60))
       }
       const groupH = Array.from(groupBuckets.values()).reduce((s, m) => s + m, 0) / 60
