@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
       duration_minutes: body.duration_minutes ?? 60,
       tutor_rate_per_hour: body.tutor_rate_per_hour ?? defaultTutorRatePerHour(body.subject),
       student_price: body.student_price ?? defaultStudentPrice(body.duration_minutes ?? 60),
+      tutor_id: body.tutor_id || null,
       active: true,
     })
     .select()

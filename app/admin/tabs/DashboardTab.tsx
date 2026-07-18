@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Calendar, AlertCircle, TrendingUp, Users, RotateCw, UserCheck, UserPlus, Monitor, MapPin, GraduationCap, ClipboardCheck, UserMinus, UsersRound, Clock, X } from 'lucide-react'
-import { Student, StudentEnrollment, CourseGroup } from '@/lib/types'
+import { Student, StudentEnrollment, CourseGroup, Tutor } from '@/lib/types'
 import { defaultStudentPrice, defaultTutorRatePerHour } from '@/lib/pricing'
 
 // Pojemność lokalu: 6 sal × 6h (14–20) × 5 dni (pon–pt) = 180 roboczogodzin/tydzień
@@ -81,12 +81,13 @@ export default function DashboardTab({ password }: { password: string }) {
   const [showSignupsPanel, setShowSignupsPanel] = useState(false)
   // Zdefiniowane grupy — rezerwują miejsce w grafiku niezależnie od liczby przypisanych uczniów
   const [courseGroups, setCourseGroups] = useState<CourseGroup[]>([])
+  const [tutors, setTutors] = useState<Tutor[]>([])
   const [showGroupForm, setShowGroupForm] = useState(false)
   const [savingGroup, setSavingGroup] = useState(false)
   const [newGroup, setNewGroup] = useState({
     name: '', subject: '', location: 'Wyszków' as 'Wyszków' | 'Online', duration_minutes: 60,
     is_maturzysta: false, is_e8: false, level: '' as '' | 'podstawowa' | 'rozszerzona',
-    tutor_rate_per_hour: '0', student_price: String(defaultStudentPrice(60)),
+    tutor_rate_per_hour: '0', student_price: String(defaultStudentPrice(60)), tutor_id: '',
   })
   // Czy admin ręcznie zmienił stawki — jeśli nie, dociągamy sugerowane wartości przy zmianie przedmiotu/czasu
   const [groupRatesTouched, setGroupRatesTouched] = useState(false)
@@ -94,7 +95,7 @@ export default function DashboardTab({ password }: { password: string }) {
   const [editGroupForm, setEditGroupForm] = useState({
     name: '', subject: '', location: 'Wyszków' as 'Wyszków' | 'Online', duration_minutes: 60,
     is_maturzysta: false, is_e8: false, level: '' as '' | 'podstawowa' | 'rozszerzona',
-    tutor_rate_per_hour: '0', student_price: '',
+    tutor_rate_per_hour: '0', student_price: '', tutor_id: '',
   })
   const [savingGroupEdit, setSavingGroupEdit] = useState(false)
 
@@ -113,6 +114,9 @@ export default function DashboardTab({ password }: { password: string }) {
     const groupsRes = await fetch('/api/admin/course-groups', { headers })
     const groups: CourseGroup[] = groupsRes.ok ? await groupsRes.json() : []
     setCourseGroups(groups)
+
+    const tutorsRes = await fetch('/api/admin/tutors', { headers })
+    setTutors(tutorsRes.ok ? await tutorsRes.json() : [])
 
     // Wypełnienie: indywidualne zapisy liczą się wprost z zapisów uczniów.
     // Grupowe: liczą się WYŁĄCZNIE zdefiniowane grupy (course_groups) — grupa
@@ -188,10 +192,11 @@ export default function DashboardTab({ password }: { password: string }) {
         ...newGroup, level: newGroup.level || null,
         tutor_rate_per_hour: Number(newGroup.tutor_rate_per_hour) || 0,
         student_price: newGroup.student_price ? Number(newGroup.student_price) : null,
+        tutor_id: newGroup.tutor_id || null,
       }),
     })
     if (res.ok) {
-      setNewGroup({ name: '', subject: '', location: 'Wyszków', duration_minutes: 60, is_maturzysta: false, is_e8: false, level: '', tutor_rate_per_hour: '0', student_price: String(defaultStudentPrice(60)) })
+      setNewGroup({ name: '', subject: '', location: 'Wyszków', duration_minutes: 60, is_maturzysta: false, is_e8: false, level: '', tutor_rate_per_hour: '0', student_price: String(defaultStudentPrice(60)), tutor_id: '' })
       setGroupRatesTouched(false)
       await loadSchoolStats()
     }
@@ -216,6 +221,7 @@ export default function DashboardTab({ password }: { password: string }) {
       is_maturzysta: g.is_maturzysta, is_e8: g.is_e8, level: g.level || '',
       tutor_rate_per_hour: String(g.tutor_rate_per_hour ?? 0),
       student_price: String(g.student_price ?? defaultStudentPrice(g.duration_minutes)),
+      tutor_id: g.tutor_id || '',
     })
   }
 
@@ -228,6 +234,7 @@ export default function DashboardTab({ password }: { password: string }) {
         id: editingGroupDefId, ...editGroupForm, level: editGroupForm.level || null,
         tutor_rate_per_hour: Number(editGroupForm.tutor_rate_per_hour) || 0,
         student_price: editGroupForm.student_price ? Number(editGroupForm.student_price) : null,
+        tutor_id: editGroupForm.tutor_id || null,
       }),
     })
     if (res.ok) {
@@ -406,6 +413,11 @@ export default function DashboardTab({ password }: { password: string }) {
                     onChange={e => { setGroupRatesTouched(true); setNewGroup({ ...newGroup, tutor_rate_per_hour: e.target.value }) }}
                     className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900" />
                 </div>
+                <select value={newGroup.tutor_id} onChange={e => setNewGroup({ ...newGroup, tutor_id: e.target.value })}
+                  className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900">
+                  <option value="">Korepetytor prowadzący (nieprzypisany)</option>
+                  {tutors.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
                 <div className="flex items-center gap-3 text-xs text-gray-600">
                   <label className="flex items-center gap-1">
                     <input type="checkbox" checked={newGroup.is_maturzysta}
@@ -509,6 +521,11 @@ export default function DashboardTab({ password }: { password: string }) {
                             onChange={e => setEditGroupForm({ ...editGroupForm, tutor_rate_per_hour: e.target.value })}
                             className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900" />
                         </div>
+                        <select value={editGroupForm.tutor_id} onChange={e => setEditGroupForm({ ...editGroupForm, tutor_id: e.target.value })}
+                          className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900">
+                          <option value="">Korepetytor prowadzący (nieprzypisany)</option>
+                          {tutors.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
                         <div className="col-span-2 flex gap-2">
                           <button onClick={saveGroupEdit} disabled={savingGroupEdit || !editGroupForm.name.trim() || !editGroupForm.subject}
                             className="flex-1 px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50">
@@ -529,7 +546,7 @@ export default function DashboardTab({ password }: { password: string }) {
                           {g.is_maturzysta && ' · maturzysta'}{g.is_e8 && ' · E8'} · {memberCount} {memberCount === 1 ? 'uczeń' : 'uczniów'}
                         </p>
                         <p className="text-xs text-gray-400">
-                          {g.student_price ?? defaultStudentPrice(g.duration_minutes)} zł/os · korepetytor {g.tutor_rate_per_hour}/h
+                          {g.student_price ?? defaultStudentPrice(g.duration_minutes)} zł/os · {g.tutor_id ? (tutors.find(t => t.id === g.tutor_id)?.name || 'korepetytor') : 'brak korepetytora'} {g.tutor_rate_per_hour}/h
                           {' · '}przychód {revenue} zł − koszt {tutorCost.toFixed(0)} zł ={' '}
                           <span className={profit >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>zysk {profit.toFixed(0)} zł</span>
                         </p>

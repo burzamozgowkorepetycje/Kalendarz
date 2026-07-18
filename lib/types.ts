@@ -108,6 +108,7 @@ export interface CourseGroup {
   duration_minutes: number
   tutor_rate_per_hour: number
   student_price: number | null
+  tutor_id: string | null
   active: boolean
   created_at: string
 }

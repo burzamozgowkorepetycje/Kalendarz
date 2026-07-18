@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { ChevronLeft, ChevronRight, X, Plus, RefreshCw, Users, User, Trash2, CalendarDays, Calendar, Search, Video, MapPin, Send } from 'lucide-react'
 import { Tutor, Student, Lesson, LessonStudent, CourseGroup, StudentEnrollment } from '@/lib/types'
 import Combobox from '@/app/components/Combobox'
+import { defaultStudentPrice } from '@/lib/pricing'
 
 const ROOMS = ['Sala 1', 'Sala 2', 'Sala 3', 'Sala 4', 'Sala 5', 'Sala 6']
 const HOURS = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00']
@@ -914,21 +915,20 @@ export default function CalendarTab({ password }: { password: string }) {
                     setSelectedCourseGroupId(gid)
                     const g = courseGroups.find(x => x.id === gid)
                     if (!g) return
+                    const tutorAmount = Math.round((g.tutor_rate_per_hour || 0) * (g.duration_minutes / 60))
                     setForm(f => ({
                       ...f, subject: g.subject, duration_minutes: String(g.duration_minutes),
                       lesson_type: g.is_maturzysta ? 'Kursy maturalne' : 'Zajęcia grupowe',
+                      tutor_id: g.tutor_id || f.tutor_id, tutor_amount: String(tutorAmount),
                     }))
-                    const memberIds = allEnrollments
-                      .filter(en => en.active && en.mode === 'group' && en.group_name?.trim() === g.name)
-                      .map(en => en.student_id)
-                    const enrolledStudentIds = new Set(
-                      students.filter(s => memberIds.includes(s.id) && ['zapisany', 'aktywny'].includes(s.status || 'potencjalny')).map(s => s.id)
-                    )
-                    if (enrolledStudentIds.size > 0) {
-                      setGroupEntries(Array.from(enrolledStudentIds).map(sid => {
-                        const s = students.find(x => x.id === sid)
-                        return { student_id: sid, amount_due: rateFor(s, 'group') }
-                      }))
+                    const memberEnrollments = allEnrollments
+                      .filter(en => en.active && en.mode === 'group' && en.group_name?.trim() === g.name
+                        && ['zapisany', 'aktywny'].includes(students.find(s => s.id === en.student_id)?.status || 'potencjalny'))
+                    if (memberEnrollments.length > 0) {
+                      setGroupEntries(memberEnrollments.map(en => ({
+                        student_id: en.student_id,
+                        amount_due: String(en.price ?? g.student_price ?? defaultStudentPrice(g.duration_minutes)),
+                      })))
                     }
                   }}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-900 mb-3">
