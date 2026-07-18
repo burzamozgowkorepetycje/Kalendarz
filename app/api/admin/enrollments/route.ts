@@ -63,6 +63,13 @@ export async function PUT(req: NextRequest) {
     fields.cancelled_at = null
   }
 
+  if ('price' in fields) {
+    const { data: prev } = await supabaseAdmin.from('student_enrollments').select('price').eq('id', id).single()
+    if (prev && prev.price !== fields.price) {
+      await supabaseAdmin.from('price_history').insert({ entity_type: 'enrollment_price', entity_id: id, old_value: prev.price, new_value: fields.price })
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .from('student_enrollments')
     .update(fields)

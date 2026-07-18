@@ -65,6 +65,7 @@ export interface Lesson {
   lesson_type: string | null
   subject: string | null
   series_id: string | null
+  course_group_id: string | null
   // Obecność uzupełniana przez korepetytora
   attendance_status: 'present' | 'absent' | 'not_held' | null
   attendance_submitted: boolean

@@ -91,6 +91,7 @@ export async function POST(req: NextRequest) {
       lesson_type: body.lesson_type ?? null,
       subject: body.subject ?? null,
       series_id: body.series_id ?? null,
+      course_group_id: body.course_group_id ?? null,
       count_toward_earnings: body.count_toward_earnings ?? true,
       status: body.status || (body.tutor_id ? 'booked' : 'available'),
       payment_status: 'unpaid',

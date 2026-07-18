@@ -54,6 +54,18 @@ export async function PUT(req: NextRequest) {
   const { id, ...fields } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
+  if ('tutor_rate_per_hour' in fields || 'student_price' in fields) {
+    const { data: prev } = await supabaseAdmin.from('course_groups').select('tutor_rate_per_hour, student_price').eq('id', id).single()
+    if (prev) {
+      if ('tutor_rate_per_hour' in fields && prev.tutor_rate_per_hour !== fields.tutor_rate_per_hour) {
+        await supabaseAdmin.from('price_history').insert({ entity_type: 'group_tutor_rate', entity_id: id, old_value: prev.tutor_rate_per_hour, new_value: fields.tutor_rate_per_hour })
+      }
+      if ('student_price' in fields && prev.student_price !== fields.student_price) {
+        await supabaseAdmin.from('price_history').insert({ entity_type: 'group_student_price', entity_id: id, old_value: prev.student_price, new_value: fields.student_price })
+      }
+    }
+  }
+
   const { data, error } = await supabaseAdmin
     .from('course_groups')
     .update(fields)

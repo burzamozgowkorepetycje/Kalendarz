@@ -98,6 +98,8 @@ export default function DashboardTab({ password }: { password: string }) {
     tutor_rate_per_hour: '0', student_price: '', tutor_id: '',
   })
   const [savingGroupEdit, setSavingGroupEdit] = useState(false)
+  const [groupEarnings, setGroupEarnings] = useState<Record<string, { lessonsCount: number; studentRevenue: number; tutorCost: number }>>({})
+  const [priceHistory, setPriceHistory] = useState<{ tutor: { old_value: number | null; new_value: number | null; changed_at: string }[]; student: { old_value: number | null; new_value: number | null; changed_at: string }[] }>({ tutor: [], student: [] })
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
 
@@ -117,6 +119,12 @@ export default function DashboardTab({ password }: { password: string }) {
 
     const tutorsRes = await fetch('/api/admin/tutors', { headers })
     setTutors(tutorsRes.ok ? await tutorsRes.json() : [])
+
+    const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
+    const earningsRes = await fetch(`/api/admin/course-groups/earnings?from=${monthStart}&to=${monthEnd}`, { headers })
+    const earnings = earningsRes.ok ? await earningsRes.json() : []
+    setGroupEarnings(Object.fromEntries(earnings.map((e: any) => [e.course_group_id, e])))
 
     // Wypełnienie: indywidualne zapisy liczą się wprost z zapisów uczniów.
     // Grupowe: liczą się WYŁĄCZNIE zdefiniowane grupy (course_groups) — grupa
@@ -223,6 +231,10 @@ export default function DashboardTab({ password }: { password: string }) {
       student_price: String(g.student_price ?? defaultStudentPrice(g.duration_minutes)),
       tutor_id: g.tutor_id || '',
     })
+    Promise.all([
+      fetch(`/api/admin/price-history?entity_type=group_tutor_rate&entity_id=${g.id}`, { headers }).then(r => r.ok ? r.json() : []),
+      fetch(`/api/admin/price-history?entity_type=group_student_price&entity_id=${g.id}`, { headers }).then(r => r.ok ? r.json() : []),
+    ]).then(([tutor, student]) => setPriceHistory({ tutor, student }))
   }
 
   const saveGroupEdit = async () => {
@@ -453,6 +465,7 @@ export default function DashboardTab({ password }: { password: string }) {
                   const { revenue, tutorCost, profit, memberCount } = groupProfit(g)
                   if (editingGroupDefId === g.id) {
                     const { members, revenue } = groupProfit(g)
+                    const real = groupEarnings[g.id]
                     return (
                       <div key={g.id} className="py-2 grid grid-cols-2 gap-2 p-3 bg-blue-50 rounded-lg mb-1">
                         <div className="col-span-2 bg-white rounded-lg border border-gray-200 p-2">
@@ -473,6 +486,36 @@ export default function DashboardTab({ password }: { password: string }) {
                             <p className="text-xs text-gray-500 mt-1 pt-1 border-t border-gray-100">Razem: <span className="font-semibold">{revenue} zł</span></p>
                           )}
                         </div>
+                        <div className="col-span-2 bg-white rounded-lg border border-gray-200 p-2">
+                          <p className="text-xs font-semibold text-gray-600 mb-1">Realny zysk (ten miesiąc, z zajęć w kalendarzu)</p>
+                          {!real || real.lessonsCount === 0 ? (
+                            <p className="text-xs text-gray-400">Brak odbytych/zaplanowanych zajęć tej grupy w tym miesiącu</p>
+                          ) : (
+                            <p className="text-xs text-gray-700">
+                              {real.lessonsCount} {real.lessonsCount === 1 ? 'zajęcia' : 'zajęć'} · przychód {real.studentRevenue} zł − koszt {real.tutorCost} zł ={' '}
+                              <span className={real.studentRevenue - real.tutorCost >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                                zysk {(real.studentRevenue - real.tutorCost).toFixed(0)} zł
+                              </span>
+                            </p>
+                          )}
+                        </div>
+                        {(priceHistory.tutor.length > 0 || priceHistory.student.length > 0) && (
+                          <div className="col-span-2 bg-white rounded-lg border border-gray-200 p-2">
+                            <p className="text-xs font-semibold text-gray-600 mb-1">Historia zmian stawek</p>
+                            <div className="space-y-0.5">
+                              {priceHistory.tutor.map((h, i) => (
+                                <p key={`t${i}`} className="text-xs text-gray-500">
+                                  {new Date(h.changed_at).toLocaleDateString('pl-PL')}: korepetytor {h.old_value ?? '—'} → {h.new_value ?? '—'} zł/h
+                                </p>
+                              ))}
+                              {priceHistory.student.map((h, i) => (
+                                <p key={`s${i}`} className="text-xs text-gray-500">
+                                  {new Date(h.changed_at).toLocaleDateString('pl-PL')}: cena ucznia {h.old_value ?? '—'} → {h.new_value ?? '—'} zł
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                         <input value={editGroupForm.name} onChange={e => setEditGroupForm({ ...editGroupForm, name: e.target.value })}
                           placeholder="Nazwa grupy"
                           className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900" />

@@ -106,7 +106,7 @@ export default function CalendarTab({ password }: { password: string }) {
     lessons.filter(l => l.date === date && sameHourBucket(l.start_time, hour))
 
   const loadModalForm = async (existing?: Lesson) => {
-    setSelectedCourseGroupId('')
+    setSelectedCourseGroupId(existing?.course_group_id || '')
     if (existing) {
       setForm({
         tutor_id: existing.tutor_id || '',
@@ -203,6 +203,7 @@ export default function CalendarTab({ password }: { password: string }) {
       lesson_type: form.lesson_type || null,
       subject: form.subject || null,
       series_id: series_id || null,
+      course_group_id: form.is_group ? (selectedCourseGroupId || null) : null,
       count_toward_earnings: form.count_earnings,
       force: force || false,
       owner_password: owner_password || undefined,
@@ -244,6 +245,7 @@ export default function CalendarTab({ password }: { password: string }) {
           end_time: endTime, is_group: form.is_group,
           lesson_type: form.lesson_type || null,
           subject: form.subject || null,
+          course_group_id: form.is_group ? (selectedCourseGroupId || null) : null,
           count_toward_earnings: form.count_earnings,
           force: force || false,
           owner_password: owner_password || undefined,

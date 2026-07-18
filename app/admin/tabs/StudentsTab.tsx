@@ -41,6 +41,8 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
   const [editingGroupValue, setEditingGroupValue] = useState('')
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
   const [editingPriceValue, setEditingPriceValue] = useState('')
+  const [priceHistoryId, setPriceHistoryId] = useState<string | null>(null)
+  const [priceHistory, setPriceHistory] = useState<{ old_value: number | null; new_value: number | null; changed_at: string }[]>([])
   const [savingEnrollment, setSavingEnrollment] = useState(false)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
@@ -134,6 +136,13 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
       setEnrollments(enrollments.map(e => e.id === updated.id ? updated : e))
       setEditingPriceId(null)
     }
+  }
+
+  const toggleHistory = async (id: string) => {
+    if (priceHistoryId === id) { setPriceHistoryId(null); return }
+    const res = await fetch(`/api/admin/price-history?entity_type=enrollment_price&entity_id=${id}`, { headers })
+    setPriceHistory(res.ok ? await res.json() : [])
+    setPriceHistoryId(id)
   }
 
   const toggleEnrollmentActive = async (enrollment: StudentEnrollment) => {
@@ -406,6 +415,9 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                               {en.price != null ? `${en.price} zł` : 'cena?'}
                             </button>
                           )}
+                          <button onClick={() => toggleHistory(en.id)} className="text-xs text-gray-400 ml-1 hover:text-blue-600">
+                            {priceHistoryId === en.id ? 'ukryj historię' : 'historia'}
+                          </button>
                         </div>
                         <div className="flex items-center gap-1">
                           {en.mode === 'group' && editingGroupId !== en.id && (
@@ -423,6 +435,19 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                           </button>
                         </div>
                         </div>
+                        {priceHistoryId === en.id && (
+                          <div className="mt-1.5 pl-1 space-y-0.5">
+                            {priceHistory.length === 0 ? (
+                              <p className="text-xs text-gray-400">Brak zapisanej historii zmian ceny</p>
+                            ) : (
+                              priceHistory.map((h, i) => (
+                                <p key={i} className="text-xs text-gray-400">
+                                  {new Date(h.changed_at).toLocaleDateString('pl-PL')}: {h.old_value ?? '—'} → {h.new_value ?? '—'} zł
+                                </p>
+                              ))
+                            )}
+                          </div>
+                        )}
                         {editingGroupId === en.id && (() => {
                           const matches = matchingGroups(en.subject, en.level || '', en.is_maturzysta, en.is_e8)
                           return (
