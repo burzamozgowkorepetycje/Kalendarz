@@ -2,13 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendPaymentReminderEmail } from '@/lib/email'
 import { sendSMS } from '@/lib/sms'
+import { isStaff } from '@/lib/auth'
 
-function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
-}
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await isStaff(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { student_id, amount } = await req.json()
 

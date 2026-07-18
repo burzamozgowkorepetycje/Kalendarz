@@ -7,12 +7,14 @@ import TutorsTab from './tabs/TutorsTab'
 import StudentsTab from './tabs/StudentsTab'
 import AttendanceTab from './tabs/AttendanceTab'
 import ReportsTab from './tabs/ReportsTab'
+import MonthlyRecordTab from './tabs/MonthlyRecordTab'
 import CalendarTab from './tabs/CalendarTab'
 import PaymentsTab from './tabs/PaymentsTab'
 import HistoryTab from './tabs/HistoryTab'
 import AttendanceReviewTab from './tabs/AttendanceReviewTab'
+import AssistantTab from './tabs/AssistantTab'
 
-const TABS = [
+const TABS: { id: string; label: string; adminOnly?: boolean }[] = [
   { id: 'dashboard', label: 'Dashboard' },
   { id: 'calendar', label: 'Kalendarz' },
   { id: 'tutors', label: 'Korepetytorzy' },
@@ -21,15 +23,21 @@ const TABS = [
   { id: 'attendance', label: 'Obecność' },
   { id: 'review', label: 'Do sprawdzenia' },
   { id: 'reports', label: 'Raporty' },
+  { id: 'monthly-record', label: 'Ewidencja' },
   { id: 'history', label: 'Historia' },
+  { id: 'assistant', label: 'Asystent AI' },
 ]
 
 export default function AdminPage() {
   const [password, setPassword] = useState('')
   const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [role, setRole] = useState<'admin' | 'secretariat' | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [activeTab, setActiveTab] = useState('calendar')
   const [error, setError] = useState('')
+  const [loggingIn, setLoggingIn] = useState(false)
+
+  const visibleTabs = TABS.filter(t => !t.adminOnly || role === 'admin')
   const [searchQ, setSearchQ] = useState('')
   const [results, setResults] = useState<{ students: { id: string; name: string; phone: string | null }[]; tutors: { id: string; name: string; phone: string | null }[] }>({ students: [], tutors: [] })
   const [searchOpen, setSearchOpen] = useState(false)
@@ -56,14 +64,25 @@ export default function AdminPage() {
     setSearchQ(''); setSearchOpen(false)
   }
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    const correct = process.env.NEXT_PUBLIC_ADMIN_PASSWORD || 'admin123'
-    if (password === correct) {
-      setIsAuthenticated(true)
-      setError('')
-    } else {
-      setError('Nieprawidłowe hasło')
+    setLoggingIn(true)
+    setError('')
+    try {
+      // Rola (admin / sekretariat) jest ustalana po stronie serwera na podstawie hasła —
+      // patrz lib/auth.ts (getStaffRole) i tabela staff_accounts.
+      const res = await fetch('/api/admin/session', { headers: { Authorization: `Bearer ${password}` } })
+      if (res.ok) {
+        const { role: r } = await res.json()
+        setRole(r)
+        setIsAuthenticated(true)
+      } else {
+        setError('Nieprawidłowe hasło')
+      }
+    } catch {
+      setError('Błąd połączenia')
+    } finally {
+      setLoggingIn(false)
     }
   }
 
@@ -96,9 +115,10 @@ export default function AdminPage() {
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white font-semibold py-2 rounded-lg hover:bg-blue-700 transition"
+              disabled={loggingIn}
+              className="w-full bg-blue-600 text-white font-semibold py-2 rounded-lg hover:bg-blue-700 transition disabled:opacity-60"
             >
-              Zaloguj się
+              {loggingIn ? 'Logowanie…' : 'Zaloguj się'}
             </button>
           </form>
         </div>
@@ -164,7 +184,7 @@ export default function AdminPage() {
         </div>
 
         <button
-          onClick={() => { setIsAuthenticated(false); setPassword('') }}
+          onClick={() => { setIsAuthenticated(false); setPassword(''); setRole(null) }}
           className="text-sm text-gray-500 hover:text-red-600 shrink-0"
         >
           Wyloguj
@@ -174,7 +194,7 @@ export default function AdminPage() {
       {/* Tabs — przewijane w poziomie na telefonie */}
       <div className="bg-white border-b border-gray-200 px-4 sm:px-6 overflow-x-auto">
         <div className="flex gap-4 sm:gap-6 min-w-max">
-          {TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -196,11 +216,13 @@ export default function AdminPage() {
         {activeTab === 'calendar' && <CalendarTab password={password} />}
         {activeTab === 'tutors' && <TutorsTab password={password} />}
         {activeTab === 'students' && <StudentsTab password={password} focusStudentId={focusStudentId} />}
-        {activeTab === 'payments' && <PaymentsTab password={password} />}
+        {activeTab === 'payments' && role === 'admin' && <PaymentsTab password={password} />}
         {activeTab === 'attendance' && <AttendanceTab password={password} />}
-        {activeTab === 'review' && <AttendanceReviewTab password={password} />}
-        {activeTab === 'reports' && <ReportsTab password={password} />}
-        {activeTab === 'history' && <HistoryTab password={password} />}
+        {activeTab === 'review' && role === 'admin' && <AttendanceReviewTab password={password} />}
+        {activeTab === 'reports' && role === 'admin' && <ReportsTab password={password} />}
+        {activeTab === 'monthly-record' && role === 'admin' && <MonthlyRecordTab password={password} />}
+        {activeTab === 'history' && role === 'admin' && <HistoryTab password={password} />}
+        {activeTab === 'assistant' && <AssistantTab password={password} />}
       </main>
     </div>
   )

@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-
-function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
-}
+import { getStaffRole, stripFinancialFields, stripFinancialFieldsDeep } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const lesson_id = new URL(req.url).searchParams.get('lesson_id')
   if (!lesson_id) return NextResponse.json({ error: 'Missing lesson_id' }, { status: 400 })
 
@@ -16,12 +14,15 @@ export async function GET(req: NextRequest) {
     .eq('lesson_id', lesson_id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { lesson_id, student_id, amount_due } = await req.json()
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const rawBody = await req.json()
+  // Sekretariat może zapisać ucznia do zajęć grupowych, ale nie ustawia kwoty (dane finansowe)
+  const { lesson_id, student_id, amount_due } = role === 'admin' ? rawBody : stripFinancialFields(rawBody)
 
   const { data, error } = await supabaseAdmin
     .from('lesson_students')
@@ -30,12 +31,15 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function PUT(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { id, ...fields } = await req.json()
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const rawBody = await req.json()
+  const { id, ...rawFields } = rawBody
+  const fields = role === 'admin' ? rawFields : stripFinancialFields(rawFields)
 
   const { data, error } = await supabaseAdmin
     .from('lesson_students')
@@ -45,11 +49,12 @@ export async function PUT(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const id = new URL(req.url).searchParams.get('id')
 
   const { error } = await supabaseAdmin.from('lesson_students').delete().eq('id', id!)

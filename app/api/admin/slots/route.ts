@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isStaff } from '@/lib/auth'
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
-
-function verifyAdmin(req: NextRequest): boolean {
-  const auth = req.headers.get('authorization')
-  return auth === `Bearer ${ADMIN_PASSWORD}`
-}
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdmin(req)) {
+  if (!(await isStaff(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -31,7 +26,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) {
+  if (!(await isStaff(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -69,7 +64,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!verifyAdmin(req)) {
+  if (!(await isStaff(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

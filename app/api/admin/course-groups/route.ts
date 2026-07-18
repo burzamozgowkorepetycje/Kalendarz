@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { defaultStudentPrice, defaultTutorRatePerHour } from '@/lib/pricing'
-
-function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
-}
+import { getStaffRole, stripFinancialFields, stripFinancialFieldsDeep } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data, error } = await supabaseAdmin
     .from('course_groups')
@@ -15,16 +13,26 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  // Sekretariat widzi grupy (nazwa, przedmiot, korepetytor), ale nie stawki/cenę (dane finansowe)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
   if (!body.name || !body.subject) {
     return NextResponse.json({ error: 'Missing name or subject' }, { status: 400 })
   }
+
+  // Sekretariat może zakładać grupy, ale stawka/cena zostaje ustawiona domyślnie przez admina później
+  const tutor_rate_per_hour = role === 'admin'
+    ? (body.tutor_rate_per_hour ?? defaultTutorRatePerHour(body.subject))
+    : defaultTutorRatePerHour(body.subject)
+  const student_price = role === 'admin'
+    ? (body.student_price ?? defaultStudentPrice(body.duration_minutes ?? 60))
+    : defaultStudentPrice(body.duration_minutes ?? 60)
 
   const { data, error } = await supabaseAdmin
     .from('course_groups')
@@ -36,8 +44,8 @@ export async function POST(req: NextRequest) {
       is_e8: body.is_e8 ?? false,
       location: body.location || 'Wyszków',
       duration_minutes: body.duration_minutes ?? 60,
-      tutor_rate_per_hour: body.tutor_rate_per_hour ?? defaultTutorRatePerHour(body.subject),
-      student_price: body.student_price ?? defaultStudentPrice(body.duration_minutes ?? 60),
+      tutor_rate_per_hour,
+      student_price,
       tutor_id: body.tutor_id || null,
       active: true,
     })
@@ -45,13 +53,17 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function PUT(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, ...fields } = await req.json()
+  const rawBody = await req.json()
+  const { id, ...rawFields } = rawBody
+  // Sekretariat nie może zmieniać stawki korepetytora ani ceny dla ucznia (dane finansowe)
+  const fields = role === 'admin' ? rawFields : stripFinancialFields(rawFields)
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   if ('tutor_rate_per_hour' in fields || 'student_price' in fields) {
@@ -74,11 +86,12 @@ export async function PUT(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })

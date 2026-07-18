@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-
-function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
-}
+import { getStaffRole, stripFinancialFields, stripFinancialFieldsDeep } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data, error } = await supabaseAdmin
     .from('students')
@@ -14,13 +12,16 @@ export async function GET(req: NextRequest) {
     .order('name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  // Sekretariat nie widzi stawek (dane finansowe)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json()
+  const rawBody = await req.json()
+  const body = role === 'admin' ? rawBody : stripFinancialFields(rawBody)
   if (!body.name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
 
   const { data, error } = await supabaseAdmin
@@ -42,13 +43,17 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function PUT(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, ...fields } = await req.json()
+  const rawBody = await req.json()
+  const { id, ...rawFields } = rawBody
+  // Sekretariat nie może zmieniać stawek ucznia (dane finansowe)
+  const fields = role === 'admin' ? rawFields : stripFinancialFields(rawFields)
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   // Puste stringi dla pól typu DATE → null (Postgres nie przyjmuje "")
@@ -62,11 +67,12 @@ export async function PUT(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { logAudit, describeLesson } from '@/lib/audit'
+import { hasFinancialAccess } from '@/lib/auth'
 
+// Decyzje tutaj (paid/unpaid/credit) to decyzje finansowe (status płatności, kredyt) —
+// dostęp wyłącznie dla roli 'admin'.
 function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
+  return hasFinancialAccess(req)
 }
 
 async function addCredit(studentId: string, amount: number) {
@@ -15,7 +18,7 @@ async function addCredit(studentId: string, amount: number) {
 
 // GET — lekcje wymagające uwagi administracji
 export async function GET(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await verifyAdmin(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { data, error } = await supabaseAdmin
     .from('lessons')
@@ -41,7 +44,7 @@ export async function GET(req: NextRequest) {
 
 // POST — decyzja administracji
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await verifyAdmin(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { lesson_id, action } = await req.json()
   if (!lesson_id || !action) return NextResponse.json({ error: 'Brak danych' }, { status: 400 })

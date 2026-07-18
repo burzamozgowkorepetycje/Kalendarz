@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { randomUUID } from 'crypto'
-
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
-
-function verifyAdmin(req: NextRequest): boolean {
-  const auth = req.headers.get('authorization')
-  return auth === `Bearer ${ADMIN_PASSWORD}`
-}
+import { getStaffRole, stripFinancialFields, stripFinancialFieldsDeep } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdmin(req)) {
+  const role = await getStaffRole(req)
+  if (!role) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -24,19 +19,22 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json(tutors)
+    // Sekretariat widzi dane kontaktowe korepetytorów, ale nie stawki (dane finansowe)
+    return NextResponse.json(role === 'admin' ? tutors : stripFinancialFieldsDeep(tutors))
   } catch (error) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) {
+  const role = await getStaffRole(req)
+  if (!role) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
-    const body = await req.json()
+    const rawBody = await req.json()
+    const body = role === 'admin' ? rawBody : stripFinancialFields(rawBody)
     const { name, email, phone } = body
 
     if (!name || !email) {
@@ -70,19 +68,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json(data[0])
+    return NextResponse.json(role === 'admin' ? data[0] : stripFinancialFieldsDeep(data[0]))
   } catch (error) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function PUT(req: NextRequest) {
-  if (!verifyAdmin(req)) {
+  const role = await getStaffRole(req)
+  if (!role) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   try {
-    const { id, ...fields } = await req.json()
+    const rawBody = await req.json()
+    const { id, ...rawFields } = rawBody
+    // Sekretariat nie może zmieniać stawek korepetytora (dane finansowe)
+    const fields = role === 'admin' ? rawFields : stripFinancialFields(rawFields)
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
     const { data, error } = await supabaseAdmin
@@ -93,14 +95,15 @@ export async function PUT(req: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-    return NextResponse.json(data)
+    return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!verifyAdmin(req)) {
+  const role = await getStaffRole(req)
+  if (!role) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

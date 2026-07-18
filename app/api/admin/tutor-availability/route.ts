@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isStaff } from '@/lib/auth'
 
-function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
-}
 
 interface Slot { weekday: number; start_time: string; end_time: string }
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await isStaff(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const tutorId = new URL(req.url).searchParams.get('tutor_id')
 
@@ -26,7 +24,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await isStaff(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { tutor_id, slots } = (await req.json()) as { tutor_id: string; slots: Slot[] }
   if (!tutor_id) return NextResponse.json({ error: 'Missing tutor_id' }, { status: 400 })

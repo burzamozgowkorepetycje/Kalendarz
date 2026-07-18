@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import { sendMeetEmail } from '@/lib/email'
+import { isStaff } from '@/lib/auth'
 
-function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
-}
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await isStaff(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { lesson_id } = await req.json()
   if (!lesson_id) return NextResponse.json({ error: 'Brak lesson_id' }, { status: 400 })

@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
-
-function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
-}
+import { getStaffRole, stripFinancialFields, stripFinancialFieldsDeep } from '@/lib/auth'
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
   const studentId = searchParams.get('student_id')
@@ -16,13 +14,17 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  // Sekretariat widzi zapisy (przedmiot, tryb, grupa), ale nie cenę (dane finansowe)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json()
+  const rawBody = await req.json()
+  // Sekretariat może zapisać ucznia, ale nie ustawia ceny (dane finansowe) — cenę uzupełnia admin
+  const body = role === 'admin' ? rawBody : stripFinancialFields(rawBody)
   if (!body.student_id || !body.subject) {
     return NextResponse.json({ error: 'Missing student_id or subject' }, { status: 400 })
   }
@@ -46,13 +48,16 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function PUT(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, ...fields } = await req.json()
+  const rawBody = await req.json()
+  const { id, ...rawFields } = rawBody
+  const fields = role === 'admin' ? rawFields : stripFinancialFields(rawFields)
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   // Jeśli oznaczamy jako nieaktywne (rezygnacja), zapisz datę
@@ -78,11 +83,12 @@ export async function PUT(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })

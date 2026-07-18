@@ -17,6 +17,20 @@ interface ReportData {
   students: StudentRow[]
 }
 
+interface TutorBillingRow {
+  month: string
+  tutor_id: string
+  tutor_name: string
+  course_group_id: string | null
+  group_name: string
+  subject: string
+  lessons: number
+  hours: number
+  tutor_amount: number
+}
+interface TutorMonthTotal { month: string; tutor_id: string; tutor_name: string; tutor_amount: number }
+interface TutorBillingData { rows: TutorBillingRow[]; tutorMonthTotals: TutorMonthTotal[] }
+
 const REPORTS_PASSWORD = process.env.NEXT_PUBLIC_REPORTS_PASSWORD || 'admin1234'
 
 function fmt(n: number) { return n.toLocaleString('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' zł' }
@@ -107,6 +121,7 @@ export default function ReportsTab({ password }: { password: string }) {
   const [paidOnly, setPaidOnly] = useState(false)
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(false)
+  const [billing, setBilling] = useState<TutorBillingData | null>(null)
   const [sendingReminder, setSendingReminder] = useState<string | null>(null)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
@@ -123,8 +138,12 @@ export default function ReportsTab({ password }: { password: string }) {
 
   const loadReport = async () => {
     setLoading(true)
-    const res = await fetch(`/api/admin/reports?from=${from}&to=${to}&paid_only=${paidOnly}`, { headers })
+    const [res, billingRes] = await Promise.all([
+      fetch(`/api/admin/reports?from=${from}&to=${to}&paid_only=${paidOnly}`, { headers }),
+      fetch(`/api/admin/tutor-billing?from=${from}&to=${to}`, { headers }),
+    ])
     if (res.ok) setData(await res.json())
+    if (billingRes.ok) setBilling(await billingRes.json())
     setLoading(false)
   }
 
@@ -338,6 +357,54 @@ export default function ReportsTab({ password }: { password: string }) {
                   <tr><td colSpan={5} className="px-6 py-6 text-center text-sm text-gray-400">Brak danych</td></tr>
                 )}
               </tbody>
+            </table>
+          </TableSection>
+
+          {/* Miesięczne rozliczenie korepetytorów per grupa i przedmiot */}
+          <TableSection title="Rozliczenie korepetytorów — miesięcznie / grupa / przedmiot">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-200 bg-gray-50 text-xs text-gray-500">
+                  <th className="px-6 py-2 text-left font-semibold">Miesiąc</th>
+                  <th className="px-6 py-2 text-left font-semibold">Korepetytor</th>
+                  <th className="px-6 py-2 text-left font-semibold">Grupa</th>
+                  <th className="px-6 py-2 text-left font-semibold">Przedmiot</th>
+                  <th className="px-6 py-2 text-right font-semibold">Zajęcia</th>
+                  <th className="px-6 py-2 text-right font-semibold">Godziny</th>
+                  <th className="px-6 py-2 text-right font-semibold">Wypłata</th>
+                </tr>
+              </thead>
+              <tbody>
+                {billing?.rows.map(r => (
+                  <tr key={`${r.month}-${r.tutor_id}-${r.course_group_id}-${r.subject}`} className="border-b border-gray-100 hover:bg-gray-50">
+                    <td className="px-6 py-3 text-sm text-gray-700">{r.month}</td>
+                    <td className="px-6 py-3 text-sm font-medium text-gray-900">{r.tutor_name}</td>
+                    <td className="px-6 py-3 text-sm text-gray-700">{r.group_name}</td>
+                    <td className="px-6 py-3 text-sm text-gray-700">{r.subject}</td>
+                    <td className="px-6 py-3 text-sm text-right text-gray-600">{r.lessons}</td>
+                    <td className="px-6 py-3 text-sm text-right text-gray-600">{fmtH(r.hours)}</td>
+                    <td className="px-6 py-3 text-sm text-right text-red-600">{fmt(r.tutor_amount)}</td>
+                  </tr>
+                ))}
+                {(!billing || billing.rows.length === 0) && (
+                  <tr><td colSpan={7} className="px-6 py-6 text-center text-sm text-gray-400">Brak danych</td></tr>
+                )}
+              </tbody>
+              {billing && billing.tutorMonthTotals.length > 0 && (
+                <tfoot>
+                  <tr className="bg-gray-50 border-t border-gray-200">
+                    <td colSpan={7} className="px-6 py-2 text-xs font-semibold text-gray-500">Suma per korepetytor / miesiąc</td>
+                  </tr>
+                  {billing.tutorMonthTotals.map(t => (
+                    <tr key={`${t.month}-${t.tutor_id}`} className="border-b border-gray-100">
+                      <td className="px-6 py-2 text-sm text-gray-700">{t.month}</td>
+                      <td colSpan={4} className="px-6 py-2 text-sm font-medium text-gray-900">{t.tutor_name}</td>
+                      <td className="px-6 py-2 text-sm text-right text-gray-600"></td>
+                      <td className="px-6 py-2 text-sm text-right font-semibold text-red-600">{fmt(t.tutor_amount)}</td>
+                    </tr>
+                  ))}
+                </tfoot>
+              )}
             </table>
           </TableSection>
         </>

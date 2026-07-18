@@ -1,11 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { ChevronLeft, ChevronRight, X, Plus, LogOut, User, Users, CalendarClock, Wallet } from 'lucide-react'
+import { ChevronLeft, ChevronRight, X, Plus, LogOut, User, Users, CalendarClock, Wallet, ClipboardList } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import AvailabilityEditor, { Slot } from '@/app/components/AvailabilityEditor'
 import AttendanceSection from '@/app/tutor/AttendanceSection'
 import MyEarnings from '@/app/tutor/MyEarnings'
+import MonthlyRecord from '@/app/tutor/MonthlyRecord'
+import GoogleCalendarSync from '@/app/tutor/GoogleCalendarSync'
 
 interface Student { id: string; name: string }
 interface CalendarLesson {
@@ -49,6 +51,7 @@ export default function TutorDashboard() {
   const [loadingCal, setLoadingCal] = useState(false)
   const [showAvailability, setShowAvailability] = useState(false)
   const [showEarnings, setShowEarnings] = useState(false)
+  const [showRecord, setShowRecord] = useState(false)
 
   const dateStr = toDateStr(currentDate)
 
@@ -140,9 +143,13 @@ export default function TutorDashboard() {
           <button onClick={() => setShowEarnings(true)} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
             <Wallet size={16} /> Zarobki
           </button>
+          <button onClick={() => setShowRecord(true)} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
+            <ClipboardList size={16} /> Ewidencja
+          </button>
           <button onClick={() => setShowAvailability(true)} className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 font-medium">
             <CalendarClock size={16} /> Dostępność
           </button>
+          <GoogleCalendarSync />
           <button onClick={handleLogout} className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800">
             <LogOut size={16} /> Wyloguj
           </button>
@@ -158,6 +165,18 @@ export default function TutorDashboard() {
             </button>
           </div>
           <MyEarnings />
+        </div>
+      )}
+
+      {showRecord && (
+        <div className="fixed inset-0 z-50 bg-gray-50 overflow-y-auto">
+          <div className="bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 print:hidden">
+            <h1 className="text-base font-bold text-gray-900">Ewidencja pracy i wynagrodzenia</h1>
+            <button onClick={() => setShowRecord(false)} className="text-sm text-blue-600 hover:text-blue-800 font-medium">
+              ← Wróć do grafiku
+            </button>
+          </div>
+          <MonthlyRecord />
         </div>
       )}
 

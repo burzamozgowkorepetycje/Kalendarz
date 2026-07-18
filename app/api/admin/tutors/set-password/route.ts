@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
+import { hasFinancialAccess } from '@/lib/auth'
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123'
-
-function verifyAdmin(req: NextRequest): boolean {
-  const auth = req.headers.get('authorization')
-  return auth === `Bearer ${ADMIN_PASSWORD}`
-}
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await hasFinancialAccess(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   try {
     const { tutor_id, login, password } = await req.json()

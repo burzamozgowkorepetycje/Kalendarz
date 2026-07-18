@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseAdmin } from '@/lib/supabase'
+import { isStaff } from '@/lib/auth'
 
 const ROOMS = ['Sala 1', 'Sala 2', 'Sala 3', 'Sala 4', 'Sala 5', 'Sala 6']
 
-function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
-}
 function toMin(t: string) { const [h, m] = String(t).split(':').map(Number); return h * 60 + (m || 0) }
 function hhmm(min: number) { return `${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}` }
 function weekdayOf(dateStr: string) { return (new Date(dateStr + 'T00:00:00').getDay() + 6) % 7 }
@@ -17,7 +15,7 @@ interface LessonRow {
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!(await isStaff(req))) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await req.json()
   const duration: number = Number(body.duration) || 60

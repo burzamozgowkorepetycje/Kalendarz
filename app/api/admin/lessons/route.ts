@@ -3,17 +3,16 @@ import { supabaseAdmin } from '@/lib/supabase'
 import { logAudit, describeLesson } from '@/lib/audit'
 import { findLessonConflicts } from '@/lib/conflicts'
 import { availabilityWarnings } from '@/lib/availability'
-
-function verifyAdmin(req: NextRequest) {
-  return req.headers.get('authorization') === `Bearer ${process.env.ADMIN_PASSWORD}`
-}
+import { getStaffRole, stripFinancialFields, stripFinancialFieldsDeep } from '@/lib/auth'
+import { syncLessonCreate, syncLessonUpdate, syncLessonsDeleteMany } from '@/lib/googleCalendarSync'
 
 // Hasło właściciela do wymuszenia mimo kolizji (sekretariat go nie zna).
 // Domyślnie = hasło raportów; można nadpisać OWNER_PASSWORD w env.
 const OWNER_PASSWORD = process.env.OWNER_PASSWORD || 'admin1234'
 
 export async function GET(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
   const studentId = searchParams.get('student_id')
@@ -36,13 +35,16 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function POST(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await req.json()
+  const rawBody = await req.json()
+  // Sekretariat nie może ustawiać kwot (amount_due / tutor_amount) — dane finansowe
+  const body = role === 'admin' ? rawBody : stripFinancialFields(rawBody)
   const { date, start_time, end_time, duration_minutes } = body
 
   if (!date || !start_time || !end_time || !duration_minutes) {
@@ -107,13 +109,20 @@ export async function POST(req: NextRequest) {
     summary: `Dodano zajęcia: ${await describeLesson(data)}`,
   })
 
-  return NextResponse.json(data)
+  // Synchronizacja z Google Calendar korepetytora — jeśli połączony. Nigdy nie rzuca,
+  // więc nie wpływa na odpowiedź główną nawet jeśli Google Calendar zawiedzie.
+  await syncLessonCreate(data)
+
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function PUT(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { id, force, owner_password, student_ids, ack_warnings, ...fields } = await req.json()
+  const { id, force, owner_password, student_ids, ack_warnings, ...rawFields } = await req.json()
+  // Sekretariat nie może zmieniać kwot (amount_due / tutor_amount) — dane finansowe
+  const fields = role === 'admin' ? rawFields : stripFinancialFields(rawFields)
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
 
   // Walidacja kolizji przy zmianie terminu (sala opcjonalna — online nie ma sali)
@@ -150,6 +159,11 @@ export async function PUT(req: NextRequest) {
     oldTutorAmount = prev?.tutor_amount ?? null
   }
 
+  // pobierz poprzedniego korepetytora (do synchronizacji Google Calendar — jeśli zmieniamy
+  // korepetytora, trzeba usunąć wydarzenie u starego i utworzyć u nowego)
+  const { data: prevLesson } = await supabaseAdmin.from('lessons').select('tutor_id').eq('id', id).single()
+  const previousTutorId: string | null = prevLesson?.tutor_id ?? null
+
   const { data, error } = await supabaseAdmin
     .from('lessons')
     .update(fields)
@@ -177,11 +191,16 @@ export async function PUT(req: NextRequest) {
     summary: `Edytowano zajęcia: ${label}`,
   })
 
-  return NextResponse.json(data)
+  // Synchronizacja z Google Calendar — aktualizuje/przenosi/tworzy wydarzenie w razie
+  // potrzeby. Nigdy nie rzuca, więc błąd Google nie wpływa na tę odpowiedź.
+  await syncLessonUpdate(data, previousTutorId)
+
+  return NextResponse.json(role === 'admin' ? data : stripFinancialFieldsDeep(data))
 }
 
 export async function DELETE(req: NextRequest) {
-  if (!verifyAdmin(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const role = await getStaffRole(req)
+  if (!role) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
@@ -242,6 +261,16 @@ export async function DELETE(req: NextRequest) {
     .single()
   const label = labelLesson ? await describeLesson(labelLesson) : ''
 
+  // Korepetytorzy usuwanych zajęć (do synchronizacji Google Calendar — musimy to wiedzieć
+  // przed usunięciem wierszy z bazy, żeby nie zostawić osieroconych wydarzeń w Google).
+  const { data: lessonsForSync } = await supabaseAdmin
+    .from('lessons')
+    .select('id, tutor_id')
+    .in('id', targetIds)
+  const tutorIdByLesson = new Map<string, string | null>(
+    (lessonsForSync ?? []).map((l) => [l.id as string, (l.tutor_id as string | null) ?? null])
+  )
+
   // Usuń powiązanych uczniów grupowych, potem lekcje
   await supabaseAdmin.from('lesson_students').delete().in('lesson_id', targetIds)
   const { error } = await supabaseAdmin.from('lessons').delete().in('id', targetIds)
@@ -253,6 +282,9 @@ export async function DELETE(req: NextRequest) {
       ? `Usunięto ${targetIds.length} zajęć z cyklu (od: ${label})`
       : `Usunięto zajęcia: ${label}`,
   })
+
+  // Synchronizacja: usuń odpowiadające wydarzenia w Google Calendar (nigdy nie rzuca).
+  await syncLessonsDeleteMany(targetIds, tutorIdByLesson)
 
   return NextResponse.json({ success: true, deleted: targetIds.length })
 }
