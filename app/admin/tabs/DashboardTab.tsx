@@ -71,6 +71,10 @@ export default function DashboardTab({ password }: { password: string }) {
   // Aktywne zapisy (tylko aktywni uczniowie) — do rozbicia po przedmiotach
   const [activeEnr, setActiveEnr] = useState<StudentEnrollment[]>([])
   const [detail, setDetail] = useState<{ title: string; predicate: (e: StudentEnrollment) => boolean } | null>(null)
+  // Wszystkie aktywne zapisy grupowe (niezależnie od statusu ucznia) — śledzenie zgłoszeń na kursy przed harmonogramem
+  const [groupSignups, setGroupSignups] = useState<StudentEnrollment[]>([])
+  const [studentNames, setStudentNames] = useState<Record<string, string>>({})
+  const [expandedCourse, setExpandedCourse] = useState<string | null>(null)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
 
@@ -116,6 +120,10 @@ export default function DashboardTab({ password }: { password: string }) {
     const activeEnrollments = enrollments.filter(e => e.active && activeStudentIds.has(e.student_id))
     setActiveEnr(activeEnrollments)
     const uniqueIds = (list: StudentEnrollment[]) => new Set(list.map(e => e.student_id)).size
+
+    // Wszystkie aktywne zapisy grupowe — niezależnie od statusu ucznia (śledzenie zgłoszeń na kursy)
+    setGroupSignups(enrollments.filter(e => e.active && e.mode === 'group'))
+    setStudentNames(Object.fromEntries(students.map(s => [s.id, s.name])))
 
     const totalStudentsInDb = students.length
     const newThisMonth = students.filter(s => s.created_at?.startsWith(thisMonth)).length
@@ -261,6 +269,62 @@ export default function DashboardTab({ password }: { password: string }) {
               <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block" /> Grupowe: <span className="font-semibold">{schoolStats.onlineGroupH.toFixed(1)} h</span></span>
             </div>
           </div>
+
+          {/* Kursy grupowe — status zapisów (przed ustaleniem harmonogramu) */}
+          {groupSignups.length > 0 && (
+            <div className="bg-white rounded-xl border border-gray-200 p-5 mb-4">
+              <p className="text-sm font-semibold text-gray-700 mb-1">Kursy grupowe — status zapisów</p>
+              <p className="text-xs text-gray-400 mb-3">Wszystkie zgłoszenia na zajęcia grupowe, niezależnie od statusu ucznia — również te bez ustalonego jeszcze terminu.</p>
+              {(() => {
+                // Grupuj po przedmiocie → dalej po nazwie grupy (lub "oczekujący")
+                type Row = { name: string; ids: Set<string> }
+                const bySubject = new Map<string, Map<string, Row>>()
+                for (const e of groupSignups) {
+                  if (!bySubject.has(e.subject)) bySubject.set(e.subject, new Map())
+                  const groups = bySubject.get(e.subject)!
+                  const key = e.group_name?.trim() || '__waiting'
+                  if (!groups.has(key)) groups.set(key, { name: e.group_name?.trim() || 'Oczekujący na przydział', ids: new Set() })
+                  groups.get(key)!.ids.add(e.student_id)
+                }
+                const subjects = Array.from(bySubject.entries())
+                  .map(([subject, groups]) => {
+                    const groupRows = Array.from(groups.entries())
+                    const total = new Set(groupRows.flatMap(([, r]) => Array.from(r.ids))).size
+                    return { subject, total, groupRows }
+                  })
+                  .sort((a, b) => b.total - a.total)
+                return (
+                  <div className="divide-y divide-gray-100">
+                    {subjects.map(({ subject, total, groupRows }) => (
+                      <div key={subject} className="py-2">
+                        <button onClick={() => setExpandedCourse(expandedCourse === subject ? null : subject)}
+                          className="w-full flex items-center justify-between text-sm hover:bg-gray-50 rounded-lg px-2 py-1.5 -mx-2">
+                          <span className="font-medium text-gray-800">{subject}</span>
+                          <span className="text-gray-500">{total} {total === 1 ? 'zapis' : 'zapisów'} <span className="text-gray-300">{expandedCourse === subject ? '▲' : '▼'}</span></span>
+                        </button>
+                        {expandedCourse === subject && (
+                          <div className="mt-1 ml-2 space-y-1.5">
+                            {groupRows
+                              .sort(([ka], [kb]) => ka === '__waiting' ? 1 : kb === '__waiting' ? -1 : ka.localeCompare(kb))
+                              .map(([key, row]) => (
+                                <div key={key} className={`px-3 py-2 rounded-lg text-xs ${key === '__waiting' ? 'bg-amber-50' : 'bg-blue-50'}`}>
+                                  <p className={`font-medium mb-1 ${key === '__waiting' ? 'text-amber-700' : 'text-blue-700'}`}>
+                                    {key === '__waiting' ? '⏳ ' : ''}{row.name} <span className="font-normal text-gray-500">({row.ids.size})</span>
+                                  </p>
+                                  <p className="text-gray-600">
+                                    {Array.from(row.ids).map(id => studentNames[id] || '—').join(', ')}
+                                  </p>
+                                </div>
+                              ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )
+              })()}
+            </div>
+          )}
 
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
             <StatCard icon={<UserCheck size={20} className="text-blue-400" />} label="Aktywnych uczniów" value={schoolStats.totalActiveStudents} color="text-blue-600" />

@@ -35,6 +35,8 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
 
   // Nowy zapis na przedmiot
   const [newEnrollment, setNewEnrollment] = useState({ subject: '', mode: 'individual' as 'individual' | 'group', location: 'Wyszków' as 'Wyszków' | 'Online', duration_minutes: 60, group_name: '', is_maturzysta: false, is_e8: false })
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
+  const [editingGroupValue, setEditingGroupValue] = useState('')
   const [savingEnrollment, setSavingEnrollment] = useState(false)
 
   const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${password}` }
@@ -132,6 +134,18 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
     if (!confirm('Usunąć ten zapis?')) return
     const res = await fetch(`/api/admin/enrollments?id=${id}`, { method: 'DELETE', headers })
     if (res.ok) setEnrollments(enrollments.filter(e => e.id !== id))
+  }
+
+  const saveEnrollmentGroup = async (id: string, group_name: string) => {
+    const res = await fetch('/api/admin/enrollments', {
+      method: 'PUT', headers,
+      body: JSON.stringify({ id, group_name: group_name.trim() || null }),
+    })
+    if (res.ok) {
+      const updated = await res.json()
+      setEnrollments(enrollments.map(e => e.id === updated.id ? updated : e))
+    }
+    setEditingGroupId(null)
   }
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -336,12 +350,15 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                 {enrollments.length > 0 && (
                   <div className="space-y-1.5 mb-3">
                     {enrollments.map(en => (
-                      <div key={en.id} className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${en.active ? 'bg-blue-50' : 'bg-gray-100 opacity-60'}`}>
+                      <div key={en.id} className={`px-3 py-2 rounded-lg text-sm ${en.active ? 'bg-blue-50' : 'bg-gray-100 opacity-60'}`}>
+                        <div className="flex items-center justify-between">
                         <div>
                           <span className="font-medium">{en.subject}</span>
                           <span className="text-xs text-gray-500 ml-2">
                             {en.mode === 'individual' ? 'indywidualne' : 'grupowe'} · {en.location} · {en.duration_minutes} min
-                            {en.mode === 'group' && en.group_name && ` · grupa: ${en.group_name}`}
+                            {en.mode === 'group' && editingGroupId !== en.id && (en.group_name
+                              ? ` · grupa: ${en.group_name}`
+                              : ' · ⏳ oczekuje na przydział do grupy')}
                             {en.is_maturzysta && ' · maturzysta'}
                             {en.is_e8 && ' · E8'}
                           </span>
@@ -352,6 +369,12 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                           )}
                         </div>
                         <div className="flex items-center gap-1">
+                          {en.mode === 'group' && editingGroupId !== en.id && (
+                            <button onClick={() => { setEditingGroupId(en.id); setEditingGroupValue(en.group_name || '') }}
+                              className="text-xs px-2 py-1 rounded-lg font-medium text-blue-600 hover:bg-blue-100">
+                              {en.group_name ? 'Zmień grupę' : 'Przydziel grupę'}
+                            </button>
+                          )}
                           <button onClick={() => toggleEnrollmentActive(en)}
                             className={`text-xs px-2 py-1 rounded-lg font-medium ${en.active ? 'text-orange-600 hover:bg-orange-100' : 'text-green-600 hover:bg-green-100'}`}>
                             {en.active ? 'Rezygnacja' : 'Przywróć'}
@@ -360,6 +383,19 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                             <Trash2 size={13} />
                           </button>
                         </div>
+                        </div>
+                        {editingGroupId === en.id && (
+                          <div className="flex items-center gap-2 mt-2">
+                            <input autoFocus value={editingGroupValue} onChange={e => setEditingGroupValue(e.target.value)}
+                              placeholder="Nazwa grupy (np. Matura MAT A)"
+                              onKeyDown={e => { if (e.key === 'Enter') saveEnrollmentGroup(en.id, editingGroupValue); if (e.key === 'Escape') setEditingGroupId(null) }}
+                              className="flex-1 border border-gray-300 rounded-lg px-2 py-1 text-sm text-gray-900" />
+                            <button onClick={() => saveEnrollmentGroup(en.id, editingGroupValue)}
+                              className="px-2 py-1 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700">Zapisz</button>
+                            <button onClick={() => setEditingGroupId(null)}
+                              className="px-2 py-1 bg-gray-200 text-gray-700 rounded-lg text-xs hover:bg-gray-300">Anuluj</button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -386,7 +422,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                   </select>
                   {newEnrollment.mode === 'group' && (
                     <input value={newEnrollment.group_name} onChange={e => setNewEnrollment({ ...newEnrollment, group_name: e.target.value })}
-                      placeholder="Nazwa grupy (np. Matura MAT A)"
+                      placeholder="Nazwa grupy (opcjonalnie — możesz przydzielić później)"
                       className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900 placeholder-gray-400" />
                   )}
                   <div className="flex items-center gap-3 text-xs text-gray-600 col-span-2">
@@ -403,7 +439,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                   </div>
                 </div>
                 {newEnrollment.mode === 'group' && !newEnrollment.group_name && (
-                  <p className="text-xs text-amber-600 mb-2">💡 Podaj nazwę grupy — uczniowie z tą samą nazwą liczą się jako jedna sala w wypełnieniu.</p>
+                  <p className="text-xs text-gray-500 mb-2">💡 Możesz zapisać bez nazwy grupy — uczeń trafi na listę oczekujących na dany kurs. Przydzielisz go do konkretnej grupy (z terminem), gdy będzie znany harmonogram — wtedy dopiero wpłynie na wypełnienie lokalu.</p>
                 )}
                 <button onClick={addEnrollment} disabled={savingEnrollment || !newEnrollment.subject}
                   className="w-full px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-semibold hover:bg-blue-700 disabled:opacity-50">
