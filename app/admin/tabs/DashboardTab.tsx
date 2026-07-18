@@ -200,11 +200,12 @@ export default function DashboardTab({ password }: { password: string }) {
 
   // Zysk grupy: suma cen zapisanych/aktywnych uczniów (cena z zapisu lub domyślna grupy) minus koszt korepetytora
   const groupProfit = (g: CourseGroup) => {
-    const memberIds = groupSignups
+    const members = groupSignups
       .filter(e => e.group_name?.trim() === g.name && ['zapisany', 'aktywny'].includes(studentStatuses[e.student_id] || 'potencjalny'))
-    const revenue = memberIds.reduce((sum, e) => sum + (e.price ?? g.student_price ?? defaultStudentPrice(g.duration_minutes)), 0)
+      .map(e => ({ enrollmentId: e.id, studentId: e.student_id, name: studentNames[e.student_id] || '—', price: e.price ?? g.student_price ?? defaultStudentPrice(g.duration_minutes) }))
+    const revenue = members.reduce((sum, m) => sum + m.price, 0)
     const tutorCost = (g.tutor_rate_per_hour || 0) * (g.duration_minutes / 60)
-    return { revenue, tutorCost, profit: revenue - tutorCost, memberCount: memberIds.length }
+    return { revenue, tutorCost, profit: revenue - tutorCost, memberCount: members.length, members }
   }
 
   const startEditGroup = (g: CourseGroup) => {
@@ -439,8 +440,27 @@ export default function DashboardTab({ password }: { password: string }) {
                 {courseGroups.filter(g => g.active).map(g => {
                   const { revenue, tutorCost, profit, memberCount } = groupProfit(g)
                   if (editingGroupDefId === g.id) {
+                    const { members, revenue } = groupProfit(g)
                     return (
                       <div key={g.id} className="py-2 grid grid-cols-2 gap-2 p-3 bg-blue-50 rounded-lg mb-1">
+                        <div className="col-span-2 bg-white rounded-lg border border-gray-200 p-2">
+                          <p className="text-xs font-semibold text-gray-600 mb-1">Uczestnicy ({members.length})</p>
+                          {members.length === 0 ? (
+                            <p className="text-xs text-gray-400">Brak zapisanych/aktywnych uczniów w tej grupie</p>
+                          ) : (
+                            <div className="divide-y divide-gray-100">
+                              {members.map(m => (
+                                <div key={m.enrollmentId} className="flex items-center justify-between py-1 text-xs text-gray-700">
+                                  <span>{m.name}</span>
+                                  <span className="font-medium">{m.price} zł</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {members.length > 0 && (
+                            <p className="text-xs text-gray-500 mt-1 pt-1 border-t border-gray-100">Razem: <span className="font-semibold">{revenue} zł</span></p>
+                          )}
+                        </div>
                         <input value={editGroupForm.name} onChange={e => setEditGroupForm({ ...editGroupForm, name: e.target.value })}
                           placeholder="Nazwa grupy"
                           className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900" />
