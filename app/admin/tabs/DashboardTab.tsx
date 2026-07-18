@@ -276,12 +276,14 @@ export default function DashboardTab({ password }: { password: string }) {
               <p className="text-sm font-semibold text-gray-700 mb-1">Kursy grupowe — status zapisów</p>
               <p className="text-xs text-gray-400 mb-3">Wszystkie zgłoszenia na zajęcia grupowe, niezależnie od statusu ucznia — również te bez ustalonego jeszcze terminu.</p>
               {(() => {
-                // Grupuj po przedmiocie → dalej po nazwie grupy (lub "oczekujący")
+                // Grupuj po przedmiocie + poziomie (podstawowa/rozszerzona nie mieszają się) → dalej po nazwie grupy (lub "oczekujący")
                 type Row = { name: string; ids: Set<string> }
+                const subjectKey = (e: StudentEnrollment) => e.subject + (e.level ? ` (${e.level})` : '')
                 const bySubject = new Map<string, Map<string, Row>>()
                 for (const e of groupSignups) {
-                  if (!bySubject.has(e.subject)) bySubject.set(e.subject, new Map())
-                  const groups = bySubject.get(e.subject)!
+                  const sk = subjectKey(e)
+                  if (!bySubject.has(sk)) bySubject.set(sk, new Map())
+                  const groups = bySubject.get(sk)!
                   const key = e.group_name?.trim() || '__waiting'
                   if (!groups.has(key)) groups.set(key, { name: e.group_name?.trim() || 'Oczekujący na przydział', ids: new Set() })
                   groups.get(key)!.ids.add(e.student_id)
@@ -355,12 +357,13 @@ export default function DashboardTab({ password }: { password: string }) {
             </div>
             <div className="overflow-y-auto divide-y divide-gray-100">
               {(() => {
-                // Grupuj po przedmiocie, licz unikalnych uczniów
+                // Grupuj po przedmiocie + poziomie, licz unikalnych uczniów
                 const matching = activeEnr.filter(detail.predicate)
                 const bySubject = new Map<string, Set<string>>()
                 for (const e of matching) {
-                  if (!bySubject.has(e.subject)) bySubject.set(e.subject, new Set())
-                  bySubject.get(e.subject)!.add(e.student_id)
+                  const sk = e.subject + (e.level ? ` (${e.level})` : '')
+                  if (!bySubject.has(sk)) bySubject.set(sk, new Set())
+                  bySubject.get(sk)!.add(e.student_id)
                 }
                 const rows = Array.from(bySubject.entries())
                   .map(([subject, ids]) => ({ subject, count: ids.size }))

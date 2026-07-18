@@ -34,7 +34,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
   const [savingInfo, setSavingInfo] = useState(false)
 
   // Nowy zapis na przedmiot
-  const [newEnrollment, setNewEnrollment] = useState({ subject: '', mode: 'individual' as 'individual' | 'group', location: 'Wyszków' as 'Wyszków' | 'Online', duration_minutes: 60, group_name: '', is_maturzysta: false, is_e8: false })
+  const [newEnrollment, setNewEnrollment] = useState({ subject: '', mode: 'individual' as 'individual' | 'group', location: 'Wyszków' as 'Wyszków' | 'Online', duration_minutes: 60, group_name: '', level: '' as '' | 'podstawowa' | 'rozszerzona', is_maturzysta: false, is_e8: false })
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
   const [editingGroupValue, setEditingGroupValue] = useState('')
   const [savingEnrollment, setSavingEnrollment] = useState(false)
@@ -114,7 +114,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
     if (res.ok) {
       const created = await res.json()
       setEnrollments([created, ...enrollments])
-      setNewEnrollment({ subject: '', mode: 'individual', location: 'Wyszków', duration_minutes: 60, group_name: '', is_maturzysta: false, is_e8: false })
+      setNewEnrollment({ subject: '', mode: 'individual', location: 'Wyszków', duration_minutes: 60, group_name: '', level: '', is_maturzysta: false, is_e8: false })
     }
     setSavingEnrollment(false)
   }
@@ -359,7 +359,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                             {en.mode === 'group' && editingGroupId !== en.id && (en.group_name
                               ? ` · grupa: ${en.group_name}`
                               : ' · ⏳ oczekuje na przydział do grupy')}
-                            {en.is_maturzysta && ' · maturzysta'}
+                            {en.is_maturzysta && ` · maturzysta${en.level ? ` (${en.level})` : ''}`}
                             {en.is_e8 && ' · E8'}
                           </span>
                           {!en.active && en.cancelled_at && (
@@ -428,7 +428,7 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                   <div className="flex items-center gap-3 text-xs text-gray-600 col-span-2">
                     <label className="flex items-center gap-1">
                       <input type="checkbox" checked={newEnrollment.is_maturzysta}
-                        onChange={e => setNewEnrollment({ ...newEnrollment, is_maturzysta: e.target.checked })} />
+                        onChange={e => setNewEnrollment({ ...newEnrollment, is_maturzysta: e.target.checked, level: e.target.checked ? newEnrollment.level : '' })} />
                       Maturzysta
                     </label>
                     <label className="flex items-center gap-1">
@@ -437,6 +437,14 @@ export default function StudentsTab({ password, focusStudentId }: { password: st
                       E8
                     </label>
                   </div>
+                  {newEnrollment.is_maturzysta && (
+                    <select value={newEnrollment.level} onChange={e => setNewEnrollment({ ...newEnrollment, level: e.target.value as '' | 'podstawowa' | 'rozszerzona' })}
+                      className="col-span-2 border border-gray-300 rounded-lg px-2 py-1.5 text-sm text-gray-900">
+                      <option value="">Poziom (nieokreślony)</option>
+                      <option value="podstawowa">Podstawowa</option>
+                      <option value="rozszerzona">Rozszerzona</option>
+                    </select>
+                  )}
                 </div>
                 {newEnrollment.mode === 'group' && !newEnrollment.group_name && (
                   <p className="text-xs text-gray-500 mb-2">💡 Możesz zapisać bez nazwy grupy — uczeń trafi na listę oczekujących na dany kurs. Przydzielisz go do konkretnej grupy (z terminem), gdy będzie znany harmonogram — wtedy dopiero wpłynie na wypełnienie lokalu.</p>

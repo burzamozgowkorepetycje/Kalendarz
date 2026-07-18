@@ -88,6 +88,7 @@ export interface StudentEnrollment {
   location: 'Wyszków' | 'Online'
   duration_minutes: number
   group_name: string | null
+  level: 'podstawowa' | 'rozszerzona' | null
   is_maturzysta: boolean
   is_e8: boolean
   active: boolean

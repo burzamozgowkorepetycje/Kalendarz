@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
       location: body.location || 'Wyszków',
       duration_minutes: body.duration_minutes ?? 60,
       group_name: body.mode === 'group' ? (body.group_name || null) : null,
+      level: body.level || null,
       is_maturzysta: body.is_maturzysta ?? false,
       is_e8: body.is_e8 ?? false,
       active: true,
